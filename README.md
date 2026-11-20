@@ -146,19 +146,17 @@ flowchart TD
 
 ---
 
-## 📝 Step-by-Step Commit & Progress Tracker
+## 📝 Project Milestones & Commit Tracker
 
-Every step is tracked with Git commits and documented below:
+The development directly mirrors the **7-Step Pipeline** specified in the design document, preceded by foundational infrastructure setup:
 
-| Step | Milestone | Status | Commit SHA |
-| :---: | :--- | :---: | :--- |
-| **0** | Repository Initialization & Architecture Specification | `DONE` | `01310af` |
-| **1** | Docker Infrastructure (Postgres 16 + pgvector & Redis) & Env Config | `DONE` | `7fbce96` |
-| **2** | Database Schemas, Migrations & Seed Data (Orders, Policies) | `PENDING` | - |
-| **3** | Express Ingestion API (`/api/orders`, `/api/refunds`), File Validation & BullMQ Queue | `PENDING` | - |
-| **4** | Multimodal AI Worker (Text + Vision Extraction) & Deterministic Cross-Check | `PENDING` | - |
-| **5** | Policy RAG Vector Search & Reasoning Agent with Citation Validation | `PENDING` | - |
-| **6** | Deterministic Guardrail Engine & Financial Thresholds | `PENDING` | - |
-| **7** | Payment Execution (Idempotency & Webhooks), Audit Log & Admin Reviewer API | `PENDING` | - |
-| **8** | Frontend: Customer Dispute Portal & Admin Reviewer Dashboard | `PENDING` | - |
-| **9** | End-to-End Testing & Verification | `PENDING` | - |
+| Step | Pipeline Stage | Description | Status | Commit SHA |
+| :---: | :--- | :--- | :---: | :--- |
+| **0** | **Infrastructure & Foundation** | Docker setup (Postgres 16 + pgvector, Redis), config & packages | `DONE` | [`eb7f4c8`](https://github.com/DEEPAK-009/RefundIQ/commit/eb7f4c8) |
+| **1** | **Customer Intake & Trust Separation** | Auth session mock, authoritative order lookup (`GET /api/orders`), read-only binding & refund form definitions | `IN PROGRESS` | - |
+| **2** | **Backend Ingestion, Verification & Queuing** | `POST /api/refunds` (multipart upload, input/file validation, DB persistence, Redis+BullMQ async enqueue, HTTP 202) | `PENDING` | - |
+| **3** | **AI Analysis & Deterministic Verification** | BullMQ worker, Text LLM complaint structuring, Vision LLM evidence inspection, deterministic DB cross-check, evidence classification | `PENDING` | - |
+| **4** | **Policy Retrieval (RAG)** | Simulated refund policy chunks (POL-01..07) in pgvector, runtime semantic retrieval with metadata filtering, context assembly | `PENDING` | - |
+| **5** | **Reasoning Agent & Citation Validation** | Policy evaluation agent (APPROVE / DECLINE / ESCALATE), programmatic citation validation (grounding check) | `PENDING` | - |
+| **6** | **Deterministic Guardrail Layer** | Hard business rules (duplicate check, item price bounds, suspicious pattern check, auto-approval thresholds) | `PENDING` | - |
+| **7** | **Human Review, Refund Execution & Notification** | Reviewer dashboard API & actions, payment gateway idempotency, webhooks, append-only audit logging & notification triggers | `PENDING` | - |
