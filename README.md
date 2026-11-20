@@ -153,7 +153,7 @@ Every step is tracked with Git commits and documented below:
 | Step | Milestone | Status | Commit SHA |
 | :---: | :--- | :---: | :--- |
 | **0** | Repository Initialization & Architecture Specification | `DONE` | `01310af` |
-| **1** | Docker Infrastructure (Postgres 16 + pgvector & Redis) & Env Config | `DONE` | `step-1` |
+| **1** | Docker Infrastructure (Postgres 16 + pgvector & Redis) & Env Config | `DONE` | `7fbce96` |
 | **2** | Database Schemas, Migrations & Seed Data (Orders, Policies) | `PENDING` | - |
 | **3** | Express Ingestion API (`/api/orders`, `/api/refunds`), File Validation & BullMQ Queue | `PENDING` | - |
 | **4** | Multimodal AI Worker (Text + Vision Extraction) & Deterministic Cross-Check | `PENDING` | - |
