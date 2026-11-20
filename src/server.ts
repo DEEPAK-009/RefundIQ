@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { env } from './config/index.js';
 import { ordersRouter } from './routes/orders.js';
+import { refundsRouter } from './routes/refunds.js';
 
 const app = express();
 
@@ -20,6 +21,9 @@ app.get('/health', (req, res) => {
 
 // Step 1: Customer Intake & Trust Separation routes
 app.use('/api/orders', ordersRouter);
+
+// Step 2: Backend Ingestion, Verification & Queuing routes
+app.use('/api/refunds', refundsRouter);
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
