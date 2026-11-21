@@ -5,13 +5,16 @@ import { extractComplaintDetails, ExtractedComplaint } from '../ai/textExtractor
 import { analyzeEvidenceImage, ExtractedEvidence } from '../ai/visionExtractor.js';
 import { performDeterministicCrossCheck, CrossCheckResult, AuthoritativeOrder } from '../ai/crossCheck.js';
 import { retrieveRelevantPolicies, assembleReasoningContext, RetrievedPolicyClause, AssembledReasoningContext } from '../ai/ragRetriever.js';
+import { evaluateDisputeWithReasoningAgent, AgentRecommendation } from '../ai/reasoningAgent.js';
+import { validateAgentCitations, CitationValidationResult } from '../ai/citationValidator.js';
 
 /**
- * BullMQ Worker Processor (Steps 3 & 4)
+ * BullMQ Worker Processor (Steps 3, 4 & 5)
  * 1. Text LLM extraction (Complaint understanding)
  * 2. Vision LLM extraction (Photo analysis)
  * 3. Deterministic DB cross-check (item validation & price calculation)
  * 4. Grounded Policy Retrieval via pgvector (RAG) & Context Assembly
+ * 5. Reasoning Agent Evaluation & Programmatic Citation Validation
  */
 export async function processRefundJob(job: Job<RefundJobPayload>) {
   const { requestId, orderId, customerId } = job.data;
@@ -120,7 +123,7 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
     console.log(`   → [${p.clause_id}] ${p.title} (similarity: ${p.similarity_score.toFixed(4)}, type: ${p.refund_type})`);
   });
 
-  // Assemble full context for the upcoming Step 5 reasoning agent
+  // Assemble full context
   const assembledContext: AssembledReasoningContext = assembleReasoningContext(
     complaintExtraction,
     evidenceExtractions,
@@ -129,7 +132,27 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
     retrievedPolicies
   );
 
-  // 6. Persist Results & Audit Trail in PostgreSQL
+  // 6. Reasoning Agent Evaluation (Step 5)
+  console.log(`🤔 [Reasoning] Evaluating claim against retrieved policy clauses...`);
+  const recommendation: AgentRecommendation = await evaluateDisputeWithReasoningAgent(assembledContext);
+
+  console.log(`   Recommendation: [${recommendation.decision}]`);
+  console.log(`   Refund Type: [${recommendation.refund_type}], Suggested Amount: ₹${recommendation.suggested_refund_amount}`);
+  console.log(`   Reasoning: "${recommendation.reasoning}"`);
+  console.log(`   Clauses Used: [${recommendation.clauses_used.join(', ')}]`);
+
+  // 7. Programmatic Citation Validation (Anti-Hallucination Guard) (Step 5)
+  console.log(`🛡️ [CitationGuard] Programmatically verifying cited clauses against DB and RAG retrieval set...`);
+  const citationValidation: CitationValidationResult = await validateAgentCitations(recommendation, retrievedPolicies);
+
+  if (citationValidation.is_valid) {
+    console.log(`   ✓ Citation validation PASSED. All clauses exist and were legitimately retrieved in RAG context.`);
+  } else {
+    console.warn(`   ⚠️ Citation validation FAILED: ${citationValidation.escalation_reason}`);
+    console.warn(`   ⚠️ Overriding decision to ESCALATE due to citation violation.`);
+  }
+
+  // 8. Persist Results & Audit Trail in PostgreSQL
   const client = await dbPool.connect();
   try {
     await client.query('BEGIN');
@@ -141,38 +164,48 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
          extracted_evidence = $2,
          evidence_status = $3,
          retrieved_clauses = $4,
-         suggested_refund_amount = $5,
+         agent_recommendation = $5,
+         citation_validation = $6,
+         suggested_refund_amount = $7,
          updated_at = NOW()
-       WHERE id = $6`,
+       WHERE id = $8`,
       [
         JSON.stringify(complaintExtraction),
         JSON.stringify(evidenceExtractions),
         crossCheckResult.evidence_status,
         JSON.stringify(retrievedPolicies),
-        crossCheckResult.eligible_refund_subtotal,
+        JSON.stringify(recommendation),
+        JSON.stringify(citationValidation),
+        recommendation.suggested_refund_amount,
         requestId,
       ]
     );
 
     await client.query(
       `INSERT INTO refund_audit_logs (refund_request_id, event_type, actor, payload)
-       VALUES ($1, 'POLICY_CLAUSES_RETRIEVED', 'AI_WORKER', $2)`,
+       VALUES ($1, 'POLICY_REASONING_COMPLETED', 'AI_WORKER', $2)`,
       [
         requestId,
         JSON.stringify({
-          evidence_status: crossCheckResult.evidence_status,
-          retrieved_clauses: retrievedPolicies.map((p) => ({
-            clause_id: p.clause_id,
-            title: p.title,
-            similarity: p.similarity_score,
-          })),
+          recommendation: {
+            decision: recommendation.decision,
+            refund_type: recommendation.refund_type,
+            suggested_amount: recommendation.suggested_refund_amount,
+            clauses_used: recommendation.clauses_used,
+            confidence: recommendation.confidence,
+          },
+          citation_validation: {
+            is_valid: citationValidation.is_valid,
+            hallucinated_clauses: citationValidation.hallucinated_clauses,
+            unretrieved_clauses: citationValidation.unretrieved_clauses,
+          },
           timestamp: new Date().toISOString(),
         }),
       ]
     );
 
     await client.query('COMMIT');
-    console.log(`💾 [Worker] Successfully persisted extractions, evidence status, and RAG policies for ${requestId}.`);
+    console.log(`💾 [Worker] Successfully persisted reasoning recommendation and citation validation for ${requestId}.`);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(`❌ [Worker] Failed to persist worker results for ${requestId}:`, err);
@@ -186,7 +219,8 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
     evidenceStatus: crossCheckResult.evidence_status,
     eligibleSubtotal: crossCheckResult.eligible_refund_subtotal,
     retrievedClauses: retrievedPolicies.map((p) => p.clause_id),
-    assembledContext,
+    recommendation,
+    citationValidation,
   };
 }
 
