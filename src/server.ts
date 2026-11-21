@@ -5,12 +5,16 @@ import { env, storagePath } from './config/index.js';
 import { ordersRouter } from './routes/orders.js';
 import { refundsRouter } from './routes/refunds.js';
 import { reviewRouter } from './routes/review.js';
+import { generalApiLimiter } from './middleware/rateLimiter.js';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Apply general API rate limiting across all /api endpoints
+app.use('/api', generalApiLimiter);
 
 // Serve static frontend assets
 app.use(express.static(path.resolve(process.cwd(), 'public')));

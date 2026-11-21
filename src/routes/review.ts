@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '../db/index.js';
 import { executePaymentGatewayRefund } from '../execution/paymentGateway.js';
 import { sendCustomerNotification } from '../execution/notifications.js';
+import { reviewActionLimiter } from '../middleware/rateLimiter.js';
 
 export const reviewRouter = Router();
 
@@ -192,7 +193,7 @@ reviewRouter.get('/:requestId', async (req: Request, res: Response): Promise<voi
  * Reviewer Actions: APPROVE | REJECT | REQUEST_INFO
  * Mandatory reviewer notes required for audit compliance!
  */
-reviewRouter.post('/:requestId/action', async (req: Request, res: Response): Promise<void> => {
+reviewRouter.post('/:requestId/action', reviewActionLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { requestId } = req.params;
 

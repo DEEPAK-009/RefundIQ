@@ -5,6 +5,7 @@ import { dbPool, query } from '../db/index.js';
 import { authenticateCustomer } from '../middleware/auth.js';
 import { uploadEvidence, computeFileHash } from '../middleware/upload.js';
 import { enqueueRefundAnalysis } from '../queue/refundQueue.js';
+import { disputeSubmissionLimiter } from '../middleware/rateLimiter.js';
 
 export const refundsRouter = Router();
 
@@ -46,7 +47,11 @@ const refundFormSchema = z.object({
  * - requested_resolution
  * - evidence (image files)
  */
-refundsRouter.post('/', uploadEvidence.array('evidence', 5), async (req: Request, res: Response): Promise<void> => {
+refundsRouter.post(
+  '/',
+  disputeSubmissionLimiter,
+  uploadEvidence.array('evidence', 5),
+  async (req: Request, res: Response): Promise<void> => {
   const customerId = req.customer!.id;
   const files = (req.files as Express.Multer.File[]) || [];
 
