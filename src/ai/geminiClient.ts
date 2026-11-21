@@ -7,12 +7,12 @@ export const ACTIVE_GEMINI_MODEL = 'gemini-3.1-flash-lite';
 if (env.GEMINI_API_KEY && env.GEMINI_API_KEY.trim() !== '') {
   try {
     aiClient = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY.trim() });
-    console.log(`✨ Live Google Gemini AI client initialized using model: ${ACTIVE_GEMINI_MODEL}`);
+    console.log(`[INFO] Live Google Gemini AI client initialized using model: ${ACTIVE_GEMINI_MODEL}`);
   } catch (err) {
-    console.warn('⚠️ Could not initialize Gemini AI client:', err);
+    console.warn('[WARN] Could not initialize Gemini AI client:', err);
   }
 } else {
-  console.log('ℹ️ No GEMINI_API_KEY provided. System will use high-fidelity deterministic multimodal simulator for testing.');
+  console.log('[INFO] No GEMINI_API_KEY provided. System will use high-fidelity deterministic multimodal simulator for testing.');
 }
 
 export const genAI = aiClient;

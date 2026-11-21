@@ -82,7 +82,7 @@ Return strictly valid JSON adhering to this exact schema:
       const parsed = JSON.parse(responseText);
       return AgentRecommendationSchema.parse(parsed);
     } catch (err) {
-      console.warn('⚠️ Gemini reasoning agent failed, falling back to deterministic adjudicator:', err);
+      console.warn('[WARN] Gemini reasoning agent failed, falling back to deterministic adjudicator:', err);
     }
   }
 
