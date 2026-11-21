@@ -156,7 +156,7 @@ The development directly mirrors the **7-Step Pipeline** specified in the design
 | **1** | **Customer Intake & Trust Separation** | Auth session mock, authoritative order lookup (`GET /api/orders`), read-only binding & refund form definitions | `DONE` | [`146cbb7`](https://github.com/DEEPAK-009/RefundIQ/commit/146cbb7) |
 | **2** | **Backend Ingestion, Verification & Queuing** | `POST /api/refunds` (multipart upload, input/file validation, DB persistence, Redis+BullMQ async enqueue, HTTP 202) | `DONE` | [`5fbbe6e`](https://github.com/DEEPAK-009/RefundIQ/commit/5fbbe6e) |
 | **3** | **AI Analysis & Deterministic Verification** | BullMQ worker, Text LLM complaint structuring, Vision LLM evidence inspection, deterministic DB cross-check, evidence classification | `DONE` | [`6d0719b`](https://github.com/DEEPAK-009/RefundIQ/commit/6d0719b) |
-| **4** | **Policy Retrieval (RAG)** | Simulated refund policy chunks (POL-01..07) in pgvector, runtime semantic retrieval with metadata filtering, context assembly | `PENDING` | - |
+| **4** | **Policy Retrieval (RAG)** | Simulated refund policy chunks (POL-01..07) in pgvector, runtime semantic retrieval with metadata filtering, context assembly | `DONE` | `step-4` |
 | **5** | **Reasoning Agent & Citation Validation** | Policy evaluation agent (APPROVE / DECLINE / ESCALATE), programmatic citation validation (grounding check) | `PENDING` | - |
 | **6** | **Deterministic Guardrail Layer** | Hard business rules (duplicate check, item price bounds, suspicious pattern check, auto-approval thresholds) | `PENDING` | - |
 | **7** | **Human Review, Refund Execution & Notification** | Reviewer dashboard API & actions, payment gateway idempotency, webhooks, append-only audit logging & notification triggers | `PENDING` | - |

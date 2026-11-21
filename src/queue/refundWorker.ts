@@ -4,14 +4,14 @@ import { query, dbPool } from '../db/index.js';
 import { extractComplaintDetails, ExtractedComplaint } from '../ai/textExtractor.js';
 import { analyzeEvidenceImage, ExtractedEvidence } from '../ai/visionExtractor.js';
 import { performDeterministicCrossCheck, CrossCheckResult, AuthoritativeOrder } from '../ai/crossCheck.js';
+import { retrieveRelevantPolicies, assembleReasoningContext, RetrievedPolicyClause, AssembledReasoningContext } from '../ai/ragRetriever.js';
 
 /**
- * Step 3: BullMQ Worker Processor
- * Consumes 'analyse_food_refund' job and performs:
+ * BullMQ Worker Processor (Steps 3 & 4)
  * 1. Text LLM extraction (Complaint understanding)
  * 2. Vision LLM extraction (Photo analysis)
  * 3. Deterministic DB cross-check (item validation & price calculation)
- * 4. Evidence classification (CONSISTENT / INCONSISTENT / INCONCLUSIVE)
+ * 4. Grounded Policy Retrieval via pgvector (RAG) & Context Assembly
  */
 export async function processRefundJob(job: Job<RefundJobPayload>) {
   const { requestId, orderId, customerId } = job.data;
@@ -66,7 +66,7 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
 
   const evidenceFilesRes = await query(`SELECT * FROM refund_evidence WHERE refund_request_id = $1`, [requestId]);
 
-  // 3. Parallel AI Extractions
+  // 3. Parallel AI Extractions (Step 3)
   console.log(`🧠 [AI] Running Complaint Understanding (Text LLM)...`);
   const complaintExtraction: ExtractedComplaint = await extractComplaintDetails({
     description: dispute.customer_description,
@@ -92,7 +92,7 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
     evidenceExtractions.push(analysis);
   }
 
-  // 4. Deterministic Cross-Check & Evidence Classification
+  // 4. Deterministic Cross-Check & Evidence Classification (Step 3)
   console.log(`⚖️ [CrossCheck] Running deterministic checks against authoritative database records...`);
   const crossCheckResult: CrossCheckResult = performDeterministicCrossCheck(
     complaintExtraction,
@@ -106,7 +106,30 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
   crossCheckResult.findings.forEach((f) => console.log(`   ✓ ${f}`));
   crossCheckResult.discrepancies.forEach((d) => console.log(`   ✗ ${d}`));
 
-  // 5. Persist Results & Audit Trail in PostgreSQL
+  // 5. Runtime Semantic Policy Retrieval (RAG via pgvector) (Step 4)
+  console.log(`🔍 [RAG] Performing semantic policy retrieval with pgvector cosine similarity...`);
+  const retrievedPolicies: RetrievedPolicyClause[] = await retrieveRelevantPolicies(
+    complaintExtraction,
+    crossCheckResult.evidence_status,
+    authoritativeOrder,
+    4
+  );
+
+  console.log(`   Retrieved ${retrievedPolicies.length} policy clauses:`);
+  retrievedPolicies.forEach((p) => {
+    console.log(`   → [${p.clause_id}] ${p.title} (similarity: ${p.similarity_score.toFixed(4)}, type: ${p.refund_type})`);
+  });
+
+  // Assemble full context for the upcoming Step 5 reasoning agent
+  const assembledContext: AssembledReasoningContext = assembleReasoningContext(
+    complaintExtraction,
+    evidenceExtractions,
+    crossCheckResult,
+    authoritativeOrder,
+    retrievedPolicies
+  );
+
+  // 6. Persist Results & Audit Trail in PostgreSQL
   const client = await dbPool.connect();
   try {
     await client.query('BEGIN');
@@ -117,13 +140,15 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
          extracted_complaint = $1,
          extracted_evidence = $2,
          evidence_status = $3,
-         suggested_refund_amount = $4,
+         retrieved_clauses = $4,
+         suggested_refund_amount = $5,
          updated_at = NOW()
-       WHERE id = $5`,
+       WHERE id = $6`,
       [
         JSON.stringify(complaintExtraction),
         JSON.stringify(evidenceExtractions),
         crossCheckResult.evidence_status,
+        JSON.stringify(retrievedPolicies),
         crossCheckResult.eligible_refund_subtotal,
         requestId,
       ]
@@ -131,22 +156,23 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
 
     await client.query(
       `INSERT INTO refund_audit_logs (refund_request_id, event_type, actor, payload)
-       VALUES ($1, 'AI_EXTRACTION_AND_CROSSCHECK_COMPLETED', 'AI_WORKER', $2)`,
+       VALUES ($1, 'POLICY_CLAUSES_RETRIEVED', 'AI_WORKER', $2)`,
       [
         requestId,
         JSON.stringify({
-          complaint: complaintExtraction,
           evidence_status: crossCheckResult.evidence_status,
-          eligible_refund_subtotal: crossCheckResult.eligible_refund_subtotal,
-          findings: crossCheckResult.findings,
-          discrepancies: crossCheckResult.discrepancies,
+          retrieved_clauses: retrievedPolicies.map((p) => ({
+            clause_id: p.clause_id,
+            title: p.title,
+            similarity: p.similarity_score,
+          })),
           timestamp: new Date().toISOString(),
         }),
       ]
     );
 
     await client.query('COMMIT');
-    console.log(`💾 [Worker] Successfully persisted AI extractions and evidence classification for ${requestId}.`);
+    console.log(`💾 [Worker] Successfully persisted extractions, evidence status, and RAG policies for ${requestId}.`);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(`❌ [Worker] Failed to persist worker results for ${requestId}:`, err);
@@ -159,6 +185,8 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
     requestId,
     evidenceStatus: crossCheckResult.evidence_status,
     eligibleSubtotal: crossCheckResult.eligible_refund_subtotal,
+    retrievedClauses: retrievedPolicies.map((p) => p.clause_id),
+    assembledContext,
   };
 }
 
