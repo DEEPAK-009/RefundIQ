@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { dbPool, query } from '../db/index.js';
 import { authenticateCustomer } from '../middleware/auth.js';
-import { uploadEvidence, computeFileHash } from '../middleware/upload.js';
+import { uploadEvidence, computeFileHash, verifyUploadedFilesIntegrity } from '../middleware/upload.js';
 import { enqueueRefundAnalysis } from '../queue/refundQueue.js';
 import { disputeSubmissionLimiter } from '../middleware/rateLimiter.js';
 
@@ -51,6 +51,7 @@ refundsRouter.post(
   '/',
   disputeSubmissionLimiter,
   uploadEvidence.array('evidence', 5),
+  verifyUploadedFilesIntegrity,
   async (req: Request, res: Response): Promise<void> => {
   const customerId = req.customer!.id;
   const files = (req.files as Express.Multer.File[]) || [];
