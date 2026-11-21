@@ -29,6 +29,14 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
 
   const ext = path.extname(file.originalname).toLowerCase();
 
+  // Strict document and PDF block
+  if (ext === '.pdf' || file.mimetype === 'application/pdf') {
+    return cb(new Error('PDF documents are strictly not accepted. Only photo evidence (JPG, PNG, WebP) is permitted.'));
+  }
+  if (['.doc', '.docx', '.txt', '.rtf', '.odt', '.xls', '.xlsx'].includes(ext)) {
+    return cb(new Error('Documents and spreadsheets are strictly not accepted. Only photo evidence (JPG, PNG, WebP) is permitted.'));
+  }
+
   if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
     cb(null, true);
   } else {
@@ -84,6 +92,21 @@ export function validateFileMagicBytes(filePath: string): MagicByteValidationRes
   // Shell script shebang: '#!' (0x23, 0x21)
   if (buffer[0] === 0x23 && buffer[1] === 0x21) {
     return { isValid: false, detectedType: 'SHELL_SCRIPT', error: 'Executable shell script header detected' };
+  }
+
+  // PDF Document header: '%PDF' (0x25, 0x50, 0x44, 0x46)
+  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+    return { isValid: false, detectedType: 'PDF_DOCUMENT', error: 'PDF documents are strictly not accepted. Only authentic images (JPEG, PNG, WebP) are permitted.' };
+  }
+
+  // ZIP / DOCX / OpenDocument archive: 'PK\x03\x04' (0x50, 0x4B, 0x03, 0x04)
+  if (buffer[0] === 0x50 && buffer[1] === 0x4B && buffer[2] === 0x03 && buffer[3] === 0x04) {
+    return { isValid: false, detectedType: 'DOCX_OR_ARCHIVE', error: 'Archive and Office document files are strictly not accepted. Only authentic images are permitted.' };
+  }
+
+  // Legacy Microsoft Office document: 0xD0 0xCF 0x11 0xE0
+  if (buffer[0] === 0xD0 && buffer[1] === 0xCF && buffer[2] === 0x11 && buffer[3] === 0xE0) {
+    return { isValid: false, detectedType: 'OLE_DOCUMENT', error: 'Microsoft Office documents are strictly not accepted. Only authentic images are permitted.' };
   }
 
   // Script or HTML text content

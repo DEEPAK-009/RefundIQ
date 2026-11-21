@@ -18,6 +18,10 @@ async function testMagicBytes() {
   // 2. Create a fake shell script disguised as JPG ('#!' header)
   fs.writeFileSync(fakeScriptPath, Buffer.from('#!/bin/bash\nrm -rf /'));
 
+  // 2b. Create a fake PDF disguised as PNG ('%PDF' header)
+  const fakePdfPath = path.join(tmpDir, 'disguised.png');
+  fs.writeFileSync(fakePdfPath, Buffer.from('%PDF-1.5 fake document payload'));
+
   // 3. Create a valid PNG header (89 50 4E 47 0D 0A 1A 0A)
   fs.writeFileSync(validPngPath, Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D]));
 
@@ -37,6 +41,15 @@ async function testMagicBytes() {
     console.log('✅ Test 2 Passed: Disguised shell script detected and blocked.\n');
   } else {
     throw new Error('Test 2 Failed: Fake script was not intercepted.');
+  }
+
+  // Test 2b: Fake PDF detection
+  const res2b = validateFileMagicBytes(fakePdfPath);
+  console.log('Test 2b (Disguised PDF .png):', res2b);
+  if (!res2b.isValid && res2b.detectedType === 'PDF_DOCUMENT') {
+    console.log('✅ Test 2b Passed: Disguised PDF document detected and blocked.\n');
+  } else {
+    throw new Error('Test 2b Failed: Disguised PDF was not intercepted.');
   }
 
   // Test 3: Valid PNG validation
