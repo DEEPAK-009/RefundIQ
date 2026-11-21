@@ -49,6 +49,7 @@ reviewRouter.get('/queue', async (req: Request, res: Response): Promise<void> =>
     const result = await query(
       `SELECT 
          r.id AS request_id,
+         r.status,
          r.order_id,
          r.customer_id,
          c.name AS customer_name,
@@ -59,6 +60,7 @@ reviewRouter.get('/queue', async (req: Request, res: Response): Promise<void> =>
          r.customer_description,
          r.evidence_status,
          r.escalation_reason,
+         r.reviewer_notes,
          r.suggested_refund_amount,
          r.final_refund_amount,
          r.created_at
@@ -66,7 +68,7 @@ reviewRouter.get('/queue', async (req: Request, res: Response): Promise<void> =>
        JOIN customers c ON r.customer_id = c.id
        JOIN orders o ON r.order_id = o.id
        JOIN restaurants rest ON o.restaurant_id = rest.id
-       WHERE r.status = 'ESCALATED'
+       WHERE r.status IN ('ESCALATED', 'ACTION_REQUIRED')
        ORDER BY r.created_at ASC`
     );
 

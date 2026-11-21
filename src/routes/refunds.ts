@@ -6,6 +6,7 @@ import { authenticateCustomer } from '../middleware/auth.js';
 import { uploadEvidence, computeFileHash, verifyUploadedFilesIntegrity } from '../middleware/upload.js';
 import { enqueueRefundAnalysis } from '../queue/refundQueue.js';
 import { disputeSubmissionLimiter } from '../middleware/rateLimiter.js';
+import { sendCustomerNotification } from '../execution/notifications.js';
 
 export const refundsRouter = Router();
 
@@ -279,6 +280,136 @@ refundsRouter.get('/:requestId', async (req: Request, res: Response): Promise<vo
     res.status(500).json({ success: false, error: 'Failed to retrieve refund dispute details.' });
   }
 });
+
+/**
+ * Option 1: Customer Supplemental Evidence Submission
+ * Endpoint: POST /api/refunds/:requestId/additional-evidence
+ * Allows customers to submit additional photo evidence or explanations when a human reviewer requests more info.
+ */
+refundsRouter.post(
+  '/:requestId/additional-evidence',
+  uploadEvidence.array('evidence', 5),
+  verifyUploadedFilesIntegrity,
+  async (req: Request, res: Response): Promise<void> => {
+    const customerId = req.customer!.id;
+    const { requestId } = req.params;
+    const customerNotes = req.body.customer_notes?.trim() || '';
+    const files = (req.files as Express.Multer.File[]) || [];
+
+    if (files.length === 0 && !customerNotes) {
+      res.status(400).json({
+        success: false,
+        error: 'Please provide at least one photo or an explanatory message.',
+      });
+      return;
+    }
+
+    const disputeResult = await query(
+      `SELECT id, customer_id, order_id, status FROM refund_requests WHERE id = $1`,
+      [requestId]
+    );
+
+    if (disputeResult.rows.length === 0) {
+      res.status(404).json({ success: false, error: `Dispute ${requestId} not found.` });
+      return;
+    }
+
+    const dispute = disputeResult.rows[0];
+
+    // Ownership check
+    if (dispute.customer_id !== customerId) {
+      res.status(403).json({ success: false, error: 'Unauthorized to update this dispute.' });
+      return;
+    }
+
+    // Must be in ACTION_REQUIRED or ESCALATED status
+    if (dispute.status !== 'ACTION_REQUIRED' && dispute.status !== 'ESCALATED') {
+      res.status(400).json({
+        success: false,
+        error: `Cannot submit supplemental evidence. Current status is ${dispute.status}.`,
+      });
+      return;
+    }
+
+    const client = await dbPool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Insert new evidence files
+      for (const file of files) {
+        const fileHash = await computeFileHash(file.path);
+        const evidenceId = `EVD-${crypto.randomBytes(6).toString('hex')}`;
+
+        await client.query(
+          `INSERT INTO refund_evidence 
+            (id, refund_request_id, original_filename, stored_filename, file_path, mime_type, file_size_bytes, sha256_hash)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            evidenceId,
+            requestId,
+            file.originalname,
+            file.filename,
+            file.path,
+            file.mimetype,
+            file.size,
+            fileHash,
+          ]
+        );
+      }
+
+      // 2. Insert audit log
+      await client.query(
+        `INSERT INTO refund_audit_logs (refund_request_id, event_type, actor, payload)
+         VALUES ($1, 'ADDITIONAL_EVIDENCE_SUBMITTED', 'CUSTOMER', $2)`,
+        [
+          requestId,
+          JSON.stringify({
+            customer_id: customerId,
+            files_uploaded: files.map((f) => f.originalname),
+            customer_notes: customerNotes,
+            timestamp: new Date().toISOString(),
+          }),
+        ]
+      );
+
+      // 3. Return status to ESCALATED for reviewer re-evaluation
+      await client.query(
+        `UPDATE refund_requests
+         SET 
+           status = 'ESCALATED',
+           updated_at = NOW()
+         WHERE id = $1`,
+        [requestId]
+      );
+
+      await client.query('COMMIT');
+
+      // 4. Send customer confirmation notification
+      await sendCustomerNotification({
+        requestId,
+        customerId,
+        orderId: dispute.order_id,
+        type: 'SENT_TO_HUMAN_REVIEW',
+        title: 'Supplemental Evidence Received',
+        message: `Your additional evidence for order ${dispute.order_id} has been received and returned to the claims review queue.`,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.json({
+        success: true,
+        message: 'Supplemental evidence submitted successfully. Your dispute has been returned to the specialist review queue.',
+        new_status: 'ESCALATED',
+        files_count: files.length,
+      });
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      console.error('Error submitting supplemental evidence:', err);
+      res.status(500).json({ success: false, error: 'Failed to submit supplemental evidence.' });
+    } finally {
+      client.release();
+    }
+  }
+);
 
 /**
  * Endpoint: GET /api/refunds

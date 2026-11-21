@@ -394,6 +394,20 @@ function renderTrackingStatus(refund) {
     escalationRow.classList.add('hidden');
   }
 
+  // Supplemental Evidence / Action Required Card (Option 1)
+  const suppCard = document.getElementById('supplementalEvidenceCard');
+  const suppInstructions = document.getElementById('supplementalInstructions');
+  if (suppCard) {
+    if (refund.status === 'ACTION_REQUIRED') {
+      suppCard.classList.remove('hidden');
+      if (suppInstructions) {
+        suppInstructions.innerText = refund.reviewer_notes || 'The claims specialist has requested clearer photos or additional documentation before approving this refund.';
+      }
+    } else {
+      suppCard.classList.add('hidden');
+    }
+  }
+
   // AI Reasoning Card & Citations
   const reasoningCard = document.getElementById('trackingReasoningCard');
   const reasoningText = document.getElementById('trackingReasoningText');
@@ -486,6 +500,54 @@ function renderTrackingStatus(refund) {
   }
 }
 
+// Option 1: Submit Supplemental Evidence Form (POST /api/refunds/:requestId/additional-evidence)
+async function submitSupplementalEvidence(event) {
+  event.preventDefault();
+  if (!currentTrackingId) return;
+
+  const btn = document.getElementById('submitSupplementalBtn');
+  const fileInput = document.getElementById('supplementalFiles');
+  const notesInput = document.getElementById('supplementalNotes');
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    alert('Please select at least one photo to upload.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Uploading Requested Photos...';
+
+  try {
+    const formData = new FormData();
+    formData.append('customer_notes', notesInput.value || '');
+    for (let i = 0; i < fileInput.files.length; i++) {
+      formData.append('evidence', fileInput.files[i]);
+    }
+
+    const res = await fetch(`/api/refunds/${currentTrackingId}/additional-evidence`, {
+      method: 'POST',
+      headers: { 'x-customer-id': currentCustomerId },
+      body: formData,
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      alert('Supplemental evidence received! Your dispute has been returned to the specialist review queue.');
+      document.getElementById('supplementalForm').reset();
+      pollCurrentDispute();
+      loadCustomerDisputes();
+      loadReviewQueue();
+    } else {
+      alert(`Upload rejected: ${data.message || data.error}`);
+    }
+  } catch (err) {
+    alert(`Network error: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span>Submit Requested Photos & Re-open Review</span><i class="fa-solid fa-paper-plane text-xs ml-2"></i>';
+  }
+}
+
 // 2. Load Reviewer Queue (GET /api/review/queue)
 async function loadReviewQueue() {
   try {
@@ -517,6 +579,11 @@ async function loadReviewQueue() {
     data.disputes.forEach((d) => {
       const card = document.createElement('div');
       const isSelected = activeReviewDisputeId === d.request_id;
+      const isActionReq = d.status === 'ACTION_REQUIRED';
+      const statusPill = isActionReq
+        ? '<span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-amber-100 text-amber-800 border border-amber-300">Awaiting Customer Info</span>'
+        : '<span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-red-100 text-red-800">Needs Review</span>';
+
       card.className = `p-4 rounded-xl border transition cursor-pointer ${
         isSelected ? 'border-red-500 bg-red-50/40 ring-2 ring-red-500/20' : 'border-slate-200 bg-white hover:border-slate-300'
       }`;
@@ -525,13 +592,16 @@ async function loadReviewQueue() {
       card.innerHTML = `
         <div class="flex items-start justify-between">
           <div>
-            <span class="text-xs font-bold text-slate-900 block">${d.request_id}</span>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-bold text-slate-900 block">${d.request_id}</span>
+              ${statusPill}
+            </div>
             <span class="text-xs font-semibold text-slate-700">${d.customer_name}</span>
           </div>
           <span class="text-xs font-bold text-red-600">₹${Number(d.final_refund_amount).toFixed(2)}</span>
         </div>
         <p class="text-xs text-slate-500 mt-2 truncate font-medium">${d.restaurant_name} • ${d.affected_items.join(', ')}</p>
-        <p class="text-xs text-red-600 mt-1 line-clamp-2">${d.escalation_reason}</p>
+        <p class="text-xs ${isActionReq ? 'text-amber-700 font-medium' : 'text-red-600'} mt-1 line-clamp-2">${isActionReq ? 'Specialist Note: ' + (d.reviewer_notes || 'More info needed') : d.escalation_reason}</p>
       `;
 
       queueList.appendChild(card);
