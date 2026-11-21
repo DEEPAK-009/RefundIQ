@@ -1,4 +1,4 @@
-# RefundIQ - Food Delivery Refund Agent 🍔🔍
+# RefundIQ - Food Delivery Refund Agent
 
 [![Status](https://img.shields.io/badge/Status-In%20Development-yellow.svg)](#)
 [![Stack](https://img.shields.io/badge/Stack-Node.js%20%7C%20TypeScript%20%7C%20PostgreSQL%20%7C%20Redis%20%7C%20Gemini-blue.svg)](#)
@@ -9,7 +9,7 @@ It applies a strict **defense-in-depth architecture**: sandwiching AI multimodal
 
 ---
 
-## 🏛 Architecture Overview
+## Architecture Overview
 
 ```mermaid
 flowchart TD
@@ -84,7 +84,7 @@ flowchart TD
 
 ---
 
-## 🚀 The 7-Step Pipeline
+## The 7-Step Pipeline
 
 1. **Step 1: Customer Intake & Trust Separation**
    - Session authentication verifies identity (`customer_id`).
@@ -132,7 +132,7 @@ flowchart TD
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
 - **Runtime & Language**: Node.js 22 LTS, TypeScript 5
 - **Backend Framework**: Express.js
@@ -146,7 +146,7 @@ flowchart TD
 
 ---
 
-## 📝 Project Milestones & Commit Tracker
+## Project Milestones & Commit Tracker
 
 The development directly mirrors the **7-Step Pipeline** specified in the design document, preceded by foundational infrastructure setup:
 

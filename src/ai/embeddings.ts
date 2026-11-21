@@ -23,7 +23,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         return values;
       }
     } catch (err) {
-      console.warn('⚠️ Gemini embedding API failed, falling back to deterministic local embedding:', err);
+      console.warn('[WARN] Gemini embedding API failed, falling back to deterministic local embedding:', err);
     }
   }
 
