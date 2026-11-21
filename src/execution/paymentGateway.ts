@@ -56,7 +56,7 @@ export async function executePaymentGatewayRefund(
 
     // Idempotency check: If already executed, return existing transaction safely
     if (dispute.payment_refund_id) {
-      console.log(`ℹ️ [PaymentGateway] Idempotent hit: Refund for ${requestId} was already executed (${dispute.payment_refund_id}).`);
+      console.log(`[INFO] [PaymentGateway] Idempotent hit: Refund for ${requestId} was already executed (${dispute.payment_refund_id}).`);
       await client.query('ROLLBACK');
       return {
         success: true,
@@ -149,7 +149,7 @@ export async function executePaymentGatewayRefund(
 
     await client.query('COMMIT');
 
-    console.log(`💳 [PaymentGateway] Refund of ₹${amount} successfully executed! Transaction ID: ${transactionId}`);
+    console.log(`[PaymentGateway] Refund of ₹${amount} successfully executed! Transaction ID: ${transactionId}`);
 
     return {
       success: true,
@@ -164,7 +164,7 @@ export async function executePaymentGatewayRefund(
     };
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error(`❌ [PaymentGateway] Refund execution failed for dispute ${requestId}:`, error);
+    console.error(`[ERROR] [PaymentGateway] Refund execution failed for dispute ${requestId}:`, error);
     throw error;
   } finally {
     client.release();

@@ -4,7 +4,7 @@ import { RetrievedPolicyClause } from '../ai/ragRetriever.js';
 import { dbPool } from '../db/index.js';
 
 async function runStep5Tests() {
-  console.log('🧪 Starting Step 5 Verification Tests (Reasoning & Citation Validation)...');
+  console.log('[TEST] Starting Step 5 Verification Tests (Reasoning & Citation Validation)...');
 
   // Simulated retrieved RAG set for a missing item dispute
   const mockRetrievedPolicies: RetrievedPolicyClause[] = [
@@ -59,7 +59,7 @@ async function runStep5Tests() {
   if (!validResult.is_valid || validResult.requires_escalation) {
     throw new Error('Test Case 1 failed: Valid recommendation was rejected!');
   }
-  console.log('✅ Test Case 1 Passed: Valid citation passed validation.');
+  console.log('[PASS] Test Case 1 Passed: Valid citation passed validation.');
 
   // Test Case 2: Hallucinated / Non-Existent Clause (cites fake POL-99)
   console.log('\n--- Test Case 2: Hallucinated Clause Detection (Anti-Hallucination Guard) ---');
@@ -79,7 +79,7 @@ async function runStep5Tests() {
   if (hallucinatedResult.is_valid || !hallucinatedResult.requires_escalation || !hallucinatedResult.hallucinated_clauses.includes('POL-99_FAKE_RULE')) {
     throw new Error('Test Case 2 failed: Hallucinated clause was not caught!');
   }
-  console.log('✅ Test Case 2 Passed: Fake clause POL-99_FAKE_RULE was caught and triggered escalation.');
+  console.log('[PASS] Test Case 2 Passed: Fake clause POL-99_FAKE_RULE was caught and triggered escalation.');
 
   // Test Case 3: Real DB Clause but NOT Retrieved in RAG for this dispute
   console.log('\n--- Test Case 3: Unretrieved Clause Detection ---');
@@ -100,13 +100,13 @@ async function runStep5Tests() {
   if (unretrievedResult.is_valid || !unretrievedResult.requires_escalation || !unretrievedResult.unretrieved_clauses.includes('POL-03')) {
     throw new Error('Test Case 3 failed: Unretrieved clause was not caught!');
   }
-  console.log('✅ Test Case 3 Passed: Unretrieved clause POL-03 was caught and triggered escalation.');
+  console.log('[PASS] Test Case 3 Passed: Unretrieved clause POL-03 was caught and triggered escalation.');
 
-  console.log('\n🎉 ALL STEP 5 CITATION VALIDATION TESTS PASSED!');
+  console.log('\nALL STEP 5 CITATION VALIDATION TESTS PASSED!');
   await dbPool.end();
 }
 
 runStep5Tests().catch((err) => {
-  console.error('❌ Step 5 test failure:', err);
+  console.error('[FAIL] Step 5 test failure:', err);
   process.exit(1);
 });

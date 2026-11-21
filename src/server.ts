@@ -50,8 +50,8 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 const server = app.listen(env.PORT, () => {
-  console.log(`🚀 RefundIQ Express Server running at http://localhost:${env.PORT}`);
-  console.log(`📦 Step 1 Endpoint: GET /api/orders (Session Order Lookup) ready.`);
+  console.log(`RefundIQ Express Server running at http://localhost:${env.PORT}`);
+  console.log(`Step 1 Endpoint: GET /api/orders (Session Order Lookup) ready.`);
 });
 
 export default app;

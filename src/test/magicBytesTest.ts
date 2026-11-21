@@ -3,7 +3,7 @@ import path from 'path';
 import { validateFileMagicBytes } from '../middleware/upload.js';
 
 async function testMagicBytes() {
-  console.log('🧪 Starting Option 3: Magic-Byte Binary Inspection Tests...\n');
+  console.log('[TEST] Starting Option 3: Magic-Byte Binary Inspection Tests...\n');
 
   const tmpDir = path.resolve(process.cwd(), 'storage/test_tmp');
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
@@ -29,7 +29,7 @@ async function testMagicBytes() {
   const res1 = validateFileMagicBytes(fakeExePath);
   console.log('Test 1 (Fake EXE .png):', res1);
   if (!res1.isValid && res1.detectedType === 'EXE_WINDOWS') {
-    console.log('✅ Test 1 Passed: Disguised Windows binary detected and blocked.\n');
+    console.log('[PASS] Test 1 Passed: Disguised Windows binary detected and blocked.\n');
   } else {
     throw new Error('Test 1 Failed: Fake EXE was not intercepted.');
   }
@@ -38,7 +38,7 @@ async function testMagicBytes() {
   const res2 = validateFileMagicBytes(fakeScriptPath);
   console.log('Test 2 (Shell Script .jpg):', res2);
   if (!res2.isValid && res2.detectedType === 'SHELL_SCRIPT') {
-    console.log('✅ Test 2 Passed: Disguised shell script detected and blocked.\n');
+    console.log('[PASS] Test 2 Passed: Disguised shell script detected and blocked.\n');
   } else {
     throw new Error('Test 2 Failed: Fake script was not intercepted.');
   }
@@ -47,7 +47,7 @@ async function testMagicBytes() {
   const res2b = validateFileMagicBytes(fakePdfPath);
   console.log('Test 2b (Disguised PDF .png):', res2b);
   if (!res2b.isValid && res2b.detectedType === 'PDF_DOCUMENT') {
-    console.log('✅ Test 2b Passed: Disguised PDF document detected and blocked.\n');
+    console.log('[PASS] Test 2b Passed: Disguised PDF document detected and blocked.\n');
   } else {
     throw new Error('Test 2b Failed: Disguised PDF was not intercepted.');
   }
@@ -56,17 +56,17 @@ async function testMagicBytes() {
   const res3 = validateFileMagicBytes(validPngPath);
   console.log('Test 3 (Valid PNG):', res3);
   if (res3.isValid && res3.detectedType === 'image/png') {
-    console.log('✅ Test 3 Passed: Authentic PNG magic-bytes verified successfully.\n');
+    console.log('[PASS] Test 3 Passed: Authentic PNG magic-bytes verified successfully.\n');
   } else {
     throw new Error('Test 3 Failed: Valid PNG was rejected.');
   }
 
   // Cleanup test files
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  console.log('🎉 ALL MAGIC-BYTE BINARY INSPECTION TESTS PASSED!');
+  console.log('ALL MAGIC-BYTE BINARY INSPECTION TESTS PASSED!');
 }
 
 testMagicBytes().catch((err) => {
-  console.error('❌ Magic-byte test failed:', err);
+  console.error('[FAIL] Magic-byte test failed:', err);
   process.exit(1);
 });

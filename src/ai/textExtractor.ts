@@ -68,7 +68,7 @@ Extract strictly valid JSON with this exact schema:
       const validated = ExtractedComplaintSchema.parse(parsed);
       return validated;
     } catch (err) {
-      console.warn('⚠️ Gemini text extraction failed, falling back to deterministic extractor:', err);
+      console.warn('[WARN] Gemini text extraction failed, falling back to deterministic extractor:', err);
     }
   }
 

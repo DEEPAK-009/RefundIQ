@@ -149,6 +149,14 @@ export function performDeterministicCrossCheck(
       evidenceStatus = 'INCONCLUSIVE';
       findings.push('Evidence status: INCONCLUSIVE. Cannot conclusively determine food mismatch without clear visual item identification.');
     }
+  } else if (complaint.issue_category === 'food_quality') {
+    if (primaryEvidence && (primaryEvidence.visible_spillage_or_damage || (primaryEvidence.summary_observations && primaryEvidence.summary_observations.length > 10))) {
+      evidenceStatus = 'CONSISTENT';
+      findings.push('Evidence status: CONSISTENT. Photographic evidence verifying meal condition received.');
+    } else {
+      evidenceStatus = 'INCONCLUSIVE';
+      findings.push('Evidence status: INCONCLUSIVE. Cannot conclusively determine food quality defect from photograph alone.');
+    }
   } else {
     evidenceStatus = 'INCONCLUSIVE';
   }

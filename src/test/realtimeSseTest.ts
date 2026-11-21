@@ -1,7 +1,7 @@
 import { broadcastDisputeEvent } from '../events/eventBus.js';
 
 async function testRealtimeSSE() {
-  console.log('🧪 Starting Real-Time SSE Stream Verification Test...\n');
+  console.log('[TEST] Starting Real-Time SSE Stream Verification Test...\n');
 
   const testRequestId = 'REF_SSE_VERIFY_' + Date.now();
   const res = await fetch(`http://localhost:4000/api/refunds/${testRequestId}/stream`);
@@ -34,17 +34,17 @@ async function testRealtimeSSE() {
   console.log('Pushed event received via SSE:\n' + text2.trim());
 
   if (text2.includes('AI_EXTRACTION') && text2.includes('AI Extraction started in real time')) {
-    console.log('\n✅ Real-Time SSE Push Verified: Event was received instantly across Redis Pub/Sub and HTTP stream!');
+    console.log('\n[PASS] Real-Time SSE Push Verified: Event was received instantly across Redis Pub/Sub and HTTP stream!');
   } else {
     throw new Error('Test failed: Broadcasted event was not received by SSE reader.');
   }
 
   reader.cancel();
-  console.log('\n🎉 ALL REAL-TIME SSE TESTS PASSED!');
+  console.log('\nALL REAL-TIME SSE TESTS PASSED!');
   process.exit(0);
 }
 
 testRealtimeSSE().catch((err) => {
-  console.error('❌ SSE test failed:', err);
+  console.error('[FAIL] SSE test failed:', err);
   process.exit(1);
 });

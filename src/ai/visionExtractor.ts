@@ -87,7 +87,7 @@ Return strictly valid JSON with this schema:
       const parsed = JSON.parse(responseText);
       return ExtractedEvidenceSchema.parse(parsed);
     } catch (err) {
-      console.warn('⚠️ Gemini vision analysis failed, falling back to deterministic analyzer:', err);
+      console.warn('[WARN] Gemini vision analysis failed, falling back to deterministic analyzer:', err);
     }
   }
 

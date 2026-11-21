@@ -2,7 +2,7 @@
  * Automated Verification for API Rate Limiting
  */
 async function testRateLimiting() {
-  console.log('🧪 Starting API Rate Limiting Verification Tests...\n');
+  console.log('[TEST] Starting API Rate Limiting Verification Tests...\n');
 
   // Test 1: Verify General RateLimit Headers on API
   console.log('--- Test 1: Verifying RateLimit Headers on /api/orders ---');
@@ -18,7 +18,7 @@ async function testRateLimiting() {
   console.log('RateLimit-Policy Header:', rateLimitPolicy);
 
   if (res1.status === 200 && rateLimitHeader) {
-    console.log('✅ Test 1 Passed: Standard RFC RateLimit headers are actively returned.\n');
+    console.log('[PASS] Test 1 Passed: Standard RFC RateLimit headers are actively returned.\n');
   } else {
     throw new Error('Test 1 Failed: RateLimit headers missing.');
   }
@@ -36,11 +36,11 @@ async function testRateLimiting() {
   console.log('Dispute endpoint response status:', testDisputeHeaders.status);
   console.log('Dispute RateLimit Header:', disputeRateHeader);
 
-  console.log('✅ Test 2 Passed: Dispute submission tier is armed and tracking requests per customer.\n');
-  console.log('🎉 ALL RATE LIMITING VERIFICATIONS PASSED SUCCESSFULLY!');
+  console.log('[PASS] Test 2 Passed: Dispute submission tier is armed and tracking requests per customer.\n');
+  console.log('ALL RATE LIMITING VERIFICATIONS PASSED SUCCESSFULLY!');
 }
 
 testRateLimiting().catch((err) => {
-  console.error('❌ Rate limiting test failed:', err);
+  console.error('[FAIL] Rate limiting test failed:', err);
   process.exit(1);
 });

@@ -4,7 +4,7 @@ import os from 'os';
 import { analyzeImageForensics } from '../utils/imageForensics.js';
 
 async function runForensicsTests() {
-  console.log('🧪 Starting 0-Token Image Forensics & Download Detection Test...\n');
+  console.log('[TEST] Starting 0-Token Image Forensics & Download Detection Test...\n');
 
   const tmpDir = path.join(os.tmpdir(), 'refundiq-forensics-test');
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
@@ -30,7 +30,7 @@ async function runForensicsTests() {
   console.log(`  Execution Time: ${durationMs}ms (Tokens used: 0)\n`);
 
   if (!res1.isCameraCaptured && res1.classification === 'SUSPECTED_WEB_DOWNLOAD_OR_SCREENSHOT') {
-    console.log('✅ Test 1 Passed: Correctly classified stripped web download.\n');
+    console.log('[PASS] Test 1 Passed: Correctly classified stripped web download.\n');
   } else {
     throw new Error('Test 1 Failed: Simulated web download was not flagged.');
   }
@@ -45,7 +45,7 @@ async function runForensicsTests() {
   console.log(`  Indicators:`, res2.indicators);
 
   if (res2.indicators.some((i) => i.includes('screenshot'))) {
-    console.log('✅ Test 2 Passed: Screenshot pattern detected in file provenance.\n');
+    console.log('[PASS] Test 2 Passed: Screenshot pattern detected in file provenance.\n');
   } else {
     throw new Error('Test 2 Failed: Screenshot indicator missing.');
   }
@@ -53,10 +53,10 @@ async function runForensicsTests() {
   // Clean up
   fs.rmSync(tmpDir, { recursive: true, force: true });
 
-  console.log('🎉 ALL 0-TOKEN IMAGE FORENSICS TESTS PASSED WITH ZERO API CALLS!');
+  console.log('ALL 0-TOKEN IMAGE FORENSICS TESTS PASSED WITH ZERO API CALLS!');
 }
 
 runForensicsTests().catch((err) => {
-  console.error('❌ Test failed:', err);
+  console.error('[FAIL] Test failed:', err);
   process.exit(1);
 });

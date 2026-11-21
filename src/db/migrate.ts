@@ -3,7 +3,7 @@ import path from 'path';
 import { dbPool } from './index.js';
 
 export async function runMigration() {
-  console.log('🔄 Running database migrations...');
+  console.log('[INFO] Running database migrations...');
   const schemaPath = path.resolve(process.cwd(), 'src/db/schema.sql');
   const sql = fs.readFileSync(schemaPath, 'utf8');
 
@@ -12,10 +12,10 @@ export async function runMigration() {
     await client.query('BEGIN');
     await client.query(sql);
     await client.query('COMMIT');
-    console.log('✅ Database schema migration completed successfully!');
+    console.log('[SUCCESS] Database schema migration completed successfully!');
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('❌ Migration failed:', error);
+    console.error('[ERROR] Migration failed:', error);
     throw error;
   } finally {
     client.release();

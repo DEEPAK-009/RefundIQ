@@ -26,7 +26,7 @@ export interface CustomerNotification {
 export async function sendCustomerNotification(
   notification: CustomerNotification
 ): Promise<void> {
-  console.log(`\n📢 [Notification] Dispatching to Customer ${notification.customerId}:`);
+  console.log(`\n[Notification] Dispatching to Customer ${notification.customerId}:`);
   console.log(`   Type: ${notification.type}`);
   console.log(`   Title: "${notification.title}"`);
   console.log(`   Message: "${notification.message}"`);

@@ -1,7 +1,7 @@
 import { dbPool } from './index.js';
 
 export async function seedOrders() {
-  console.log('🌱 Seeding customers, restaurants, and authoritative orders...');
+  console.log('[INFO] Seeding customers, restaurants, and authoritative orders...');
   const client = await dbPool.connect();
 
   try {
@@ -50,7 +50,9 @@ export async function seedOrders() {
         ('ORD3001', 'CUST103', 'REST001', 750.00, 'Delivered', 'Successful', 'NONE', 0.00, NOW() - INTERVAL '30 minutes', NOW() - INTERVAL '1 hour')
       ON CONFLICT (id) DO UPDATE SET
         total_amount = EXCLUDED.total_amount,
-        refund_status = EXCLUDED.refund_status;
+        refund_status = EXCLUDED.refund_status,
+        delivery_timestamp = EXCLUDED.delivery_timestamp,
+        created_at = EXCLUDED.created_at;
     `);
 
     // 4. Seed Order Items
@@ -83,10 +85,10 @@ export async function seedOrders() {
     `);
 
     await client.query('COMMIT');
-    console.log('✅ Successfully seeded customers, restaurants, and authoritative orders!');
+    console.log('[SUCCESS] Successfully seeded customers, restaurants, and authoritative orders!');
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('❌ Failed to seed orders:', error);
+    console.error('[ERROR] Failed to seed orders:', error);
     throw error;
   } finally {
     client.release();

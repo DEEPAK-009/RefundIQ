@@ -27,7 +27,7 @@ import { analyzeImageForensics, ImageForensicResult } from '../utils/imageForens
 export async function processRefundJob(job: Job<RefundJobPayload>) {
   const { requestId, orderId, customerId } = job.data;
   console.log(`\n========================================================`);
-  console.log(`🤖 [Worker] Processing Dispute: ${requestId} for Order: ${orderId}`);
+  console.log(`[Worker] Processing Dispute: ${requestId} for Order: ${orderId}`);
   console.log(`========================================================`);
 
   // 1. Transition dispute status to 'PROCESSING'
@@ -94,19 +94,19 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
   const evidenceFilesRes = await query(`SELECT * FROM refund_evidence WHERE refund_request_id = $1`, [requestId]);
 
   // Zero-Token Local Image Forensics Analysis (Detects internet downloads / screenshots)
-  console.log(`🔎 [Forensics] Running local 0-token EXIF & provenance analysis on ${evidenceFilesRes.rows.length} image(s)...`);
+  console.log(`[Forensics] Running local 0-token EXIF & provenance analysis on ${evidenceFilesRes.rows.length} image(s)...`);
   const imageForensicsReports: ImageForensicResult[] = [];
   for (const file of evidenceFilesRes.rows) {
     if (file.file_path && fs.existsSync(file.file_path)) {
       const report = await analyzeImageForensics(file.file_path);
       imageForensicsReports.push(report);
-      console.log(`   📸 [Forensics] ${file.original_filename}: ${report.classification} — ${report.summary}`);
+      console.log(`   [Forensics] ${file.original_filename}: ${report.classification} — ${report.summary}`);
     }
   }
   const primaryForensics = imageForensicsReports[0];
 
   // 3. Parallel AI Extractions (Step 3)
-  console.log(`🧠 [AI] Running Complaint Understanding (Text LLM)...`);
+  console.log(`[AI] Running Complaint Understanding (Text LLM)...`);
   const complaintExtraction: ExtractedComplaint = await extractComplaintDetails({
     description: dispute.customer_description,
     issueCategory: dispute.issue_category,
@@ -118,7 +118,7 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
   console.log(`   Claimed Issue: "${complaintExtraction.claimed_issue}"`);
   console.log(`   Affected Items: [${complaintExtraction.affected_items.join(', ')}]`);
 
-  console.log(`👁️ [AI] Running Evidence Analysis (Vision LLM) on ${evidenceFilesRes.rows.length} image(s)...`);
+  console.log(`[AI] Running Evidence Analysis (Vision LLM) on ${evidenceFilesRes.rows.length} image(s)...`);
   const evidenceExtractions: ExtractedEvidence[] = [];
   for (const file of evidenceFilesRes.rows) {
     const analysis = await analyzeEvidenceImage({
@@ -132,7 +132,7 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
   }
 
   // 4. Deterministic Cross-Check & Evidence Classification (Step 3)
-  console.log(`⚖️ [CrossCheck] Running deterministic checks against authoritative database records...`);
+  console.log(`[CrossCheck] Running deterministic checks against authoritative database records...`);
   const crossCheckResult: CrossCheckResult = performDeterministicCrossCheck(
     complaintExtraction,
     evidenceExtractions,
@@ -144,7 +144,7 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
   console.log(`   Calculated Max Eligible Amount: ₹${crossCheckResult.eligible_refund_subtotal}`);
 
   // 5. Runtime Semantic Policy Retrieval (RAG via pgvector) (Step 4)
-  console.log(`🔍 [RAG] Performing semantic policy retrieval with pgvector cosine similarity...`);
+  console.log(`[RAG] Performing semantic policy retrieval with pgvector cosine similarity...`);
   await broadcastDisputeEvent({
     requestId,
     type: 'STAGE_CHANGE',
@@ -174,17 +174,17 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
   );
 
   // 6. Reasoning Agent Evaluation (Step 5)
-  console.log(`🤔 [Reasoning] Evaluating claim against retrieved policy clauses...`);
+  console.log(`[Reasoning] Evaluating claim against retrieved policy clauses...`);
   const recommendation: AgentRecommendation = await evaluateDisputeWithReasoningAgent(assembledContext);
 
   console.log(`   Recommendation: [${recommendation.decision}], Clauses: [${recommendation.clauses_used.join(', ')}]`);
 
   // 7. Programmatic Citation Validation (Step 5)
-  console.log(`🛡️ [CitationGuard] Programmatically verifying cited clauses against DB and RAG context...`);
+  console.log(`[CitationGuard] Programmatically verifying cited clauses against DB and RAG context...`);
   const citationValidation: CitationValidationResult = await validateAgentCitations(recommendation, retrievedPolicies);
 
   // 8. Deterministic Guardrail Layer (Step 6)
-  console.log(`🚦 [Guardrails] Applying deterministic business rules & threshold limits...`);
+  console.log(`[Guardrails] Applying deterministic business rules & threshold limits...`);
   await broadcastDisputeEvent({
     requestId,
     type: 'STAGE_CHANGE',
@@ -272,7 +272,7 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
     );
 
     await client.query('COMMIT');
-    console.log(`💾 [Worker] Dispute ${requestId} routed to: ${guardrails.final_routing} (Status: ${newStatus}).`);
+    console.log(`[Worker] Dispute ${requestId} routed to: ${guardrails.final_routing} (Status: ${newStatus}).`);
 
     // Broadcast terminal evaluation result via SSE EventBus
     await broadcastDisputeEvent({
@@ -288,7 +288,7 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
     });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(`❌ [Worker] Failed to persist worker results for ${requestId}:`, err);
+    console.error(`[ERROR] [Worker] Failed to persist worker results for ${requestId}:`, err);
     throw err;
   } finally {
     client.release();
@@ -296,7 +296,7 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
 
   // 10. Step 7: Automatic Refund Execution or Notification Dispatch
   if (guardrails.final_routing === 'AUTO_APPROVE' && guardrails.final_refund_amount > 0) {
-    console.log(`⚡ [Execution] Triggering automated payment gateway execution for ${requestId}...`);
+    console.log(`[Execution] Triggering automated payment gateway execution for ${requestId}...`);
     const refundResult = await executePaymentGatewayRefund({
       requestId,
       orderId,
@@ -360,11 +360,11 @@ export function createRefundWorker() {
   );
 
   worker.on('ready', () => {
-    console.log(`⚡ BullMQ Refund Worker connected and listening for jobs on '${REFUND_QUEUE_NAME}'...`);
+    console.log(`BullMQ Refund Worker connected and listening for jobs on '${REFUND_QUEUE_NAME}'...`);
   });
 
   worker.on('failed', (job, err) => {
-    console.error(`❌ Job ${job?.id} failed with error:`, err);
+    console.error(`Job ${job?.id} failed with error:`, err);
   });
 
   return worker;

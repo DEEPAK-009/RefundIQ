@@ -5,7 +5,7 @@ import { CrossCheckResult, AuthoritativeOrder } from '../ai/crossCheck.js';
 import { CustomerRiskProfile } from '../guardrails/guardrailEngine.js';
 
 function runStep6Tests() {
-  console.log('🧪 Starting Step 6 Verification Tests (Deterministic Guardrails)...\n');
+  console.log('[TEST] Starting Step 6 Verification Tests (Deterministic Guardrails)...\n');
 
   const baseOrder: AuthoritativeOrder = {
     id: 'ORD1024',
@@ -76,7 +76,7 @@ function runStep6Tests() {
   if (result1.final_routing !== 'HUMAN_REVIEW' || result1.final_refund_amount !== 100) {
     throw new Error('Test 1 failed: Inconclusive evidence did not trigger HUMAN_REVIEW!');
   }
-  console.log('✅ Test 1 Passed: Inconclusive evidence routed to HUMAN_REVIEW.\n');
+  console.log('[PASS] Test 1 Passed: Inconclusive evidence routed to HUMAN_REVIEW.\n');
 
   // Test 2: Financial Amount Clamping (User/Agent asks for ₹500, but only Fries @ ₹100 missing)
   console.log('--- Test 2: Financial Clamping to Item Price ---');
@@ -90,7 +90,7 @@ function runStep6Tests() {
   if (result2.final_refund_amount !== 100) {
     throw new Error('Test 2 failed: Amount was not clamped to eligible item price of ₹100!');
   }
-  console.log('✅ Test 2 Passed: Amount clamped strictly to ₹100.\n');
+  console.log('[PASS] Test 2 Passed: Amount clamped strictly to ₹100.\n');
 
   // Test 3: Suspicious Customer History Guard
   console.log('--- Test 3: Suspicious Customer Fraud Guard (CUST103 with 67% refund rate) ---');
@@ -122,7 +122,7 @@ function runStep6Tests() {
   if (result3.final_routing !== 'HUMAN_REVIEW' || !result3.escalation_reason?.includes('exceeds safety threshold')) {
     throw new Error('Test 3 failed: Suspicious customer was not flagged!');
   }
-  console.log('✅ Test 3 Passed: Suspicious customer history triggered HUMAN_REVIEW.\n');
+  console.log('[PASS] Test 3 Passed: Suspicious customer history triggered HUMAN_REVIEW.\n');
 
   // Test 4: Auto-Approve Low-Risk Path (Consistent evidence, clean user, verified item, amount <= 500)
   console.log('--- Test 4: Pure AUTO_APPROVE Low-Risk Path ---');
@@ -131,7 +131,7 @@ function runStep6Tests() {
   if (result4.final_routing !== 'AUTO_APPROVE' || result4.final_refund_amount !== 100) {
     throw new Error('Test 4 failed: Clean low-risk case was not AUTO_APPROVED!');
   }
-  console.log('✅ Test 4 Passed: Clean dispute successfully reached AUTO_APPROVE!\n');
+  console.log('[PASS] Test 4 Passed: Clean dispute successfully reached AUTO_APPROVE!\n');
 
   // Test 5: Auto-Decline Path (Item not in bill)
   console.log('--- Test 5: AUTO_DECLINE (Item not on bill) ---');
@@ -151,9 +151,9 @@ function runStep6Tests() {
   if (result5.final_routing !== 'AUTO_DECLINE' || result5.final_refund_amount !== 0) {
     throw new Error('Test 5 failed: Ineligible dispute was not AUTO_DECLINED!');
   }
-  console.log('✅ Test 5 Passed: Ineligible dispute successfully reached AUTO_DECLINE!\n');
+  console.log('[PASS] Test 5 Passed: Ineligible dispute successfully reached AUTO_DECLINE!\n');
 
-  console.log('🎉 ALL STEP 6 DETERMINISTIC GUARDRAIL TESTS PASSED!');
+  console.log('ALL STEP 6 DETERMINISTIC GUARDRAIL TESTS PASSED!');
 }
 
 runStep6Tests();

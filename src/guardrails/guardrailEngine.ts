@@ -126,7 +126,7 @@ export function evaluateGuardrails(
 
   const finalAmount = clampedEligibleAmount;
 
-  // 5. Inconclusive Evidence Guard
+  // 5. Inconclusive Evidence Guard (Page 6 of PDF specification)
   const evidenceIsInconclusive = crossCheck.evidence_status === 'INCONCLUSIVE';
   checks.push({
     name: 'EVIDENCE_INCONCLUSIVE_GUARD',
@@ -208,16 +208,27 @@ export function evaluateGuardrails(
   // 11. Zero-Token Image Forensics & Origin Guard (Detects internet downloads / screenshots)
   if (forensics) {
     const isAuthentic = forensics.isCameraCaptured;
-    const isWebOrEdited = forensics.classification !== 'AUTHENTIC_CAMERA_CAPTURE';
+    const isEditedOrSynthetic = forensics.classification === 'EDITED_OR_GENERATED';
+    const isWebOrScreenshot = forensics.classification === 'SUSPECTED_WEB_DOWNLOAD_OR_SCREENSHOT';
+
+    // Route to human review if image software tampering (Photoshop, Canva, GIMP) was detected,
+    // or if a web download is submitted by a customer with high risk history.
+    const shouldEscalateForensics =
+      isEditedOrSynthetic ||
+      (isWebOrScreenshot && customer.refund_rate >= env.SUSPICIOUS_REFUND_RATE_THRESHOLD);
 
     checks.push({
       name: 'IMAGE_AUTHENTICITY_FORENSICS_GUARD',
       passed: isAuthentic,
-      action_taken: isWebOrEdited ? 'ROUTE_HUMAN_REVIEW' : 'PROCEED',
+      action_taken: shouldEscalateForensics
+        ? 'ROUTE_HUMAN_REVIEW'
+        : isWebOrScreenshot
+        ? 'ADVISORY_NOTICE'
+        : 'PROCEED',
       details: forensics.summary,
     });
 
-    if (isWebOrEdited) {
+    if (shouldEscalateForensics) {
       escalationReasons.push(`Forensic metadata warning: ${forensics.summary}`);
     }
   }

@@ -70,7 +70,7 @@ export const PLATFORM_POLICIES: PolicyDefinition[] = [
 ];
 
 export async function seedPolicies() {
-  console.log('📜 Ingesting simulated refund policies into PostgreSQL (pgvector)...');
+  console.log('[INFO] Ingesting simulated refund policies into PostgreSQL (pgvector)...');
   const client = await dbPool.connect();
 
   try {
@@ -107,10 +107,10 @@ export async function seedPolicies() {
     }
 
     await client.query('COMMIT');
-    console.log(`✅ Successfully seeded and embedded ${PLATFORM_POLICIES.length} policy clauses in pgvector!`);
+    console.log(`[SUCCESS] Successfully seeded and embedded ${PLATFORM_POLICIES.length} policy clauses in pgvector!`);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('❌ Failed to seed policies:', err);
+    console.error('[ERROR] Failed to seed policies:', err);
     throw err;
   } finally {
     client.release();
