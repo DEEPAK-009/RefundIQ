@@ -8,15 +8,18 @@ import { retrieveRelevantPolicies, assembleReasoningContext, RetrievedPolicyClau
 import { evaluateDisputeWithReasoningAgent, AgentRecommendation } from '../ai/reasoningAgent.js';
 import { validateAgentCitations, CitationValidationResult } from '../ai/citationValidator.js';
 import { evaluateGuardrails, GuardrailEvaluation, CustomerRiskProfile } from '../guardrails/guardrailEngine.js';
+import { executePaymentGatewayRefund } from '../execution/paymentGateway.js';
+import { sendCustomerNotification } from '../execution/notifications.js';
 
 /**
- * BullMQ Worker Processor (Steps 3, 4, 5 & 6)
+ * BullMQ Worker Processor (Steps 3, 4, 5, 6 & 7)
  * 1. Text LLM extraction (Complaint understanding)
  * 2. Vision LLM extraction (Photo analysis)
  * 3. Deterministic DB cross-check (item validation & price calculation)
  * 4. Grounded Policy Retrieval via pgvector (RAG) & Context Assembly
  * 5. Reasoning Agent Evaluation & Programmatic Citation Validation
  * 6. Deterministic Guardrail Layer (Financial caps, duplicate prevention, routing)
+ * 7. Automated Execution (for AUTO_APPROVE) or Human Review Queue Dispatch
  */
 export async function processRefundJob(job: Job<RefundJobPayload>) {
   const { requestId, orderId, customerId } = job.data;
@@ -159,12 +162,6 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
 
   console.log(`   Final Routing Decision: [${guardrails.final_routing}]`);
   console.log(`   Final Calculated Refund Amount: ₹${guardrails.final_refund_amount}`);
-  if (guardrails.escalation_reason) {
-    console.log(`   Escalation Trigger: "${guardrails.escalation_reason}"`);
-  }
-  if (guardrails.decline_reason) {
-    console.log(`   Decline Cause: "${guardrails.decline_reason}"`);
-  }
 
   const newStatus =
     guardrails.final_routing === 'AUTO_APPROVE'
@@ -224,14 +221,13 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
           final_refund_amount: guardrails.final_refund_amount,
           escalation_reason: guardrails.escalation_reason,
           decline_reason: guardrails.decline_reason,
-          checks_run: guardrails.guardrail_checks.length,
           timestamp: new Date().toISOString(),
         }),
       ]
     );
 
     await client.query('COMMIT');
-    console.log(`💾 [Worker] Dispute ${requestId} successfully routed to: ${guardrails.final_routing} (Status: ${newStatus}).`);
+    console.log(`💾 [Worker] Dispute ${requestId} routed to: ${guardrails.final_routing} (Status: ${newStatus}).`);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(`❌ [Worker] Failed to persist worker results for ${requestId}:`, err);
@@ -240,12 +236,56 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
     client.release();
   }
 
+  // 10. Step 7: Automatic Refund Execution or Notification Dispatch
+  if (guardrails.final_routing === 'AUTO_APPROVE' && guardrails.final_refund_amount > 0) {
+    console.log(`⚡ [Execution] Triggering automated payment gateway execution for ${requestId}...`);
+    const refundResult = await executePaymentGatewayRefund({
+      requestId,
+      orderId,
+      amount: guardrails.final_refund_amount,
+      customerId,
+      actor: 'SYSTEM_AUTO',
+    });
+
+    await sendCustomerNotification({
+      requestId,
+      customerId,
+      orderId,
+      type: 'REFUND_PROCESSED',
+      title: 'Refund Approved Automatically',
+      message: `Your dispute for order ${orderId} was verified and automatically refunded ₹${guardrails.final_refund_amount}. Transaction ID: ${refundResult.transaction_id}.`,
+      refundAmount: guardrails.final_refund_amount,
+      timestamp: new Date().toISOString(),
+    });
+  } else if (guardrails.final_routing === 'AUTO_DECLINE') {
+    await sendCustomerNotification({
+      requestId,
+      customerId,
+      orderId,
+      type: 'REFUND_DECLINED',
+      title: 'Refund Request Ineligible',
+      message: `Your refund request for order ${orderId} was declined under platform policy: ${guardrails.decline_reason}`,
+      policyReason: guardrails.decline_reason,
+      timestamp: new Date().toISOString(),
+    });
+  } else {
+    // HUMAN_REVIEW / ESCALATED
+    await sendCustomerNotification({
+      requestId,
+      customerId,
+      orderId,
+      type: 'SENT_TO_HUMAN_REVIEW',
+      title: 'Dispute Routed to Claims Specialist',
+      message: `Your dispute for order ${orderId} requires manual review by our claims team. A specialist will review your photos and order details shortly.`,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   return {
     requestId,
     evidenceStatus: crossCheckResult.evidence_status,
     finalRouting: guardrails.final_routing,
     finalRefundAmount: guardrails.final_refund_amount,
-    guardrailChecks: guardrails.guardrail_checks,
   };
 }
 

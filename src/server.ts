@@ -3,6 +3,7 @@ import cors from 'cors';
 import { env } from './config/index.js';
 import { ordersRouter } from './routes/orders.js';
 import { refundsRouter } from './routes/refunds.js';
+import { reviewRouter } from './routes/review.js';
 
 const app = express();
 
@@ -24,6 +25,9 @@ app.use('/api/orders', ordersRouter);
 
 // Step 2: Backend Ingestion, Verification & Queuing routes
 app.use('/api/refunds', refundsRouter);
+
+// Step 7: Human Review Cockpit & Execution routes
+app.use('/api/review', reviewRouter);
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
