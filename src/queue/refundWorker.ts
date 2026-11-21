@@ -7,14 +7,16 @@ import { performDeterministicCrossCheck, CrossCheckResult, AuthoritativeOrder } 
 import { retrieveRelevantPolicies, assembleReasoningContext, RetrievedPolicyClause, AssembledReasoningContext } from '../ai/ragRetriever.js';
 import { evaluateDisputeWithReasoningAgent, AgentRecommendation } from '../ai/reasoningAgent.js';
 import { validateAgentCitations, CitationValidationResult } from '../ai/citationValidator.js';
+import { evaluateGuardrails, GuardrailEvaluation, CustomerRiskProfile } from '../guardrails/guardrailEngine.js';
 
 /**
- * BullMQ Worker Processor (Steps 3, 4 & 5)
+ * BullMQ Worker Processor (Steps 3, 4, 5 & 6)
  * 1. Text LLM extraction (Complaint understanding)
  * 2. Vision LLM extraction (Photo analysis)
  * 3. Deterministic DB cross-check (item validation & price calculation)
  * 4. Grounded Policy Retrieval via pgvector (RAG) & Context Assembly
  * 5. Reasoning Agent Evaluation & Programmatic Citation Validation
+ * 6. Deterministic Guardrail Layer (Financial caps, duplicate prevention, routing)
  */
 export async function processRefundJob(job: Job<RefundJobPayload>) {
   const { requestId, orderId, customerId } = job.data;
@@ -31,6 +33,15 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
     throw new Error(`Refund dispute ${requestId} not found in database.`);
   }
   const dispute = disputeRes.rows[0];
+
+  const customerRes = await query(`SELECT id, name, total_orders, refund_count, refund_rate FROM customers WHERE id = $1`, [customerId]);
+  const customerProfile: CustomerRiskProfile = customerRes.rows[0] || {
+    id: customerId,
+    name: 'Customer',
+    total_orders: 1,
+    refund_count: 0,
+    refund_rate: 0,
+  };
 
   const orderRes = await query(
     `SELECT o.*, r.name AS restaurant_name
@@ -106,8 +117,6 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
 
   console.log(`   Evidence Classification: [${crossCheckResult.evidence_status}]`);
   console.log(`   Calculated Max Eligible Amount: ₹${crossCheckResult.eligible_refund_subtotal}`);
-  crossCheckResult.findings.forEach((f) => console.log(`   ✓ ${f}`));
-  crossCheckResult.discrepancies.forEach((d) => console.log(`   ✗ ${d}`));
 
   // 5. Runtime Semantic Policy Retrieval (RAG via pgvector) (Step 4)
   console.log(`🔍 [RAG] Performing semantic policy retrieval with pgvector cosine similarity...`);
@@ -118,12 +127,8 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
     4
   );
 
-  console.log(`   Retrieved ${retrievedPolicies.length} policy clauses:`);
-  retrievedPolicies.forEach((p) => {
-    console.log(`   → [${p.clause_id}] ${p.title} (similarity: ${p.similarity_score.toFixed(4)}, type: ${p.refund_type})`);
-  });
+  console.log(`   Retrieved ${retrievedPolicies.length} policy clauses: [${retrievedPolicies.map((p) => p.clause_id).join(', ')}]`);
 
-  // Assemble full context
   const assembledContext: AssembledReasoningContext = assembleReasoningContext(
     complaintExtraction,
     evidenceExtractions,
@@ -136,23 +141,39 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
   console.log(`🤔 [Reasoning] Evaluating claim against retrieved policy clauses...`);
   const recommendation: AgentRecommendation = await evaluateDisputeWithReasoningAgent(assembledContext);
 
-  console.log(`   Recommendation: [${recommendation.decision}]`);
-  console.log(`   Refund Type: [${recommendation.refund_type}], Suggested Amount: ₹${recommendation.suggested_refund_amount}`);
-  console.log(`   Reasoning: "${recommendation.reasoning}"`);
-  console.log(`   Clauses Used: [${recommendation.clauses_used.join(', ')}]`);
+  console.log(`   Recommendation: [${recommendation.decision}], Clauses: [${recommendation.clauses_used.join(', ')}]`);
 
-  // 7. Programmatic Citation Validation (Anti-Hallucination Guard) (Step 5)
-  console.log(`🛡️ [CitationGuard] Programmatically verifying cited clauses against DB and RAG retrieval set...`);
+  // 7. Programmatic Citation Validation (Step 5)
+  console.log(`🛡️ [CitationGuard] Programmatically verifying cited clauses against DB and RAG context...`);
   const citationValidation: CitationValidationResult = await validateAgentCitations(recommendation, retrievedPolicies);
 
-  if (citationValidation.is_valid) {
-    console.log(`   ✓ Citation validation PASSED. All clauses exist and were legitimately retrieved in RAG context.`);
-  } else {
-    console.warn(`   ⚠️ Citation validation FAILED: ${citationValidation.escalation_reason}`);
-    console.warn(`   ⚠️ Overriding decision to ESCALATE due to citation violation.`);
+  // 8. Deterministic Guardrail Layer (Step 6)
+  console.log(`🚦 [Guardrails] Applying deterministic business rules & threshold limits...`);
+  const guardrails: GuardrailEvaluation = evaluateGuardrails(
+    recommendation,
+    citationValidation,
+    crossCheckResult,
+    authoritativeOrder,
+    customerProfile
+  );
+
+  console.log(`   Final Routing Decision: [${guardrails.final_routing}]`);
+  console.log(`   Final Calculated Refund Amount: ₹${guardrails.final_refund_amount}`);
+  if (guardrails.escalation_reason) {
+    console.log(`   Escalation Trigger: "${guardrails.escalation_reason}"`);
+  }
+  if (guardrails.decline_reason) {
+    console.log(`   Decline Cause: "${guardrails.decline_reason}"`);
   }
 
-  // 8. Persist Results & Audit Trail in PostgreSQL
+  const newStatus =
+    guardrails.final_routing === 'AUTO_APPROVE'
+      ? 'AUTO_APPROVED'
+      : guardrails.final_routing === 'AUTO_DECLINE'
+      ? 'AUTO_DECLINED'
+      : 'ESCALATED';
+
+  // 9. Persist Results & Audit Trail in PostgreSQL
   const client = await dbPool.connect();
   try {
     await client.query('BEGIN');
@@ -160,52 +181,57 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
     await client.query(
       `UPDATE refund_requests
        SET 
-         extracted_complaint = $1,
-         extracted_evidence = $2,
-         evidence_status = $3,
-         retrieved_clauses = $4,
-         agent_recommendation = $5,
-         citation_validation = $6,
-         suggested_refund_amount = $7,
+         status = $1,
+         extracted_complaint = $2,
+         extracted_evidence = $3,
+         evidence_status = $4,
+         retrieved_clauses = $5,
+         agent_recommendation = $6,
+         citation_validation = $7,
+         guardrail_results = $8,
+         routing_decision = $9,
+         escalation_reason = $10,
+         suggested_refund_amount = $11,
+         final_refund_amount = $12,
          updated_at = NOW()
-       WHERE id = $8`,
+       WHERE id = $13`,
       [
+        newStatus,
         JSON.stringify(complaintExtraction),
         JSON.stringify(evidenceExtractions),
         crossCheckResult.evidence_status,
         JSON.stringify(retrievedPolicies),
         JSON.stringify(recommendation),
         JSON.stringify(citationValidation),
+        JSON.stringify(guardrails.guardrail_checks),
+        guardrails.final_routing,
+        guardrails.escalation_reason || guardrails.decline_reason || null,
         recommendation.suggested_refund_amount,
+        guardrails.final_refund_amount,
         requestId,
       ]
     );
 
     await client.query(
-      `INSERT INTO refund_audit_logs (refund_request_id, event_type, actor, payload)
-       VALUES ($1, 'POLICY_REASONING_COMPLETED', 'AI_WORKER', $2)`,
+      `INSERT INTO refund_audit_logs (refund_request_id, event_type, actor, refund_amount, payload)
+       VALUES ($1, 'GUARDRAILS_EVALUATED', 'GUARDRAIL_ENGINE', $2, $3)`,
       [
         requestId,
+        guardrails.final_refund_amount,
         JSON.stringify({
-          recommendation: {
-            decision: recommendation.decision,
-            refund_type: recommendation.refund_type,
-            suggested_amount: recommendation.suggested_refund_amount,
-            clauses_used: recommendation.clauses_used,
-            confidence: recommendation.confidence,
-          },
-          citation_validation: {
-            is_valid: citationValidation.is_valid,
-            hallucinated_clauses: citationValidation.hallucinated_clauses,
-            unretrieved_clauses: citationValidation.unretrieved_clauses,
-          },
+          final_routing: guardrails.final_routing,
+          new_status: newStatus,
+          final_refund_amount: guardrails.final_refund_amount,
+          escalation_reason: guardrails.escalation_reason,
+          decline_reason: guardrails.decline_reason,
+          checks_run: guardrails.guardrail_checks.length,
           timestamp: new Date().toISOString(),
         }),
       ]
     );
 
     await client.query('COMMIT');
-    console.log(`💾 [Worker] Successfully persisted reasoning recommendation and citation validation for ${requestId}.`);
+    console.log(`💾 [Worker] Dispute ${requestId} successfully routed to: ${guardrails.final_routing} (Status: ${newStatus}).`);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(`❌ [Worker] Failed to persist worker results for ${requestId}:`, err);
@@ -217,10 +243,9 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
   return {
     requestId,
     evidenceStatus: crossCheckResult.evidence_status,
-    eligibleSubtotal: crossCheckResult.eligible_refund_subtotal,
-    retrievedClauses: retrievedPolicies.map((p) => p.clause_id),
-    recommendation,
-    citationValidation,
+    finalRouting: guardrails.final_routing,
+    finalRefundAmount: guardrails.final_refund_amount,
+    guardrailChecks: guardrails.guardrail_checks,
   };
 }
 
