@@ -1057,16 +1057,19 @@ async function openCockpitDetail(requestId) {
       .join('');
 
     // Customer Complaint
-    document.getElementById('cockpitClaimedItems').innerText = Array.isArray(cockpit.complaint.claimed_items) ? cockpit.complaint.claimed_items.join(', ') : cockpit.complaint.claimed_items;
-    document.getElementById('cockpitCategory').innerText = cockpit.complaint.issue_category.replace(/_/g, ' ');
-    document.getElementById('cockpitCustomerDesc').innerText = `"${cockpit.complaint.customer_description}"`;
+    const claimedItems = cockpit.complaint?.claimed_items || cockpit.complaint?.affected_items || [];
+    document.getElementById('cockpitClaimedItems').innerText = Array.isArray(claimedItems) ? claimedItems.join(', ') : (claimedItems || 'None');
+    
+    const categoryName = cockpit.complaint?.issue_category || cockpit.complaint?.category || 'general';
+    document.getElementById('cockpitCategory').innerText = categoryName.replace(/_/g, ' ');
+    document.getElementById('cockpitCustomerDesc').innerText = `"${cockpit.complaint?.customer_description || ''}"`;
 
     // Escalation Cause
     document.getElementById('cockpitEscalationReason').innerText = cockpit.escalation_reason || 'Manual review required';
 
     // Evidence Gallery
     const gallery = document.getElementById('cockpitEvidenceGallery');
-    document.getElementById('cockpitEvidenceStatus').innerText = cockpit.complaint.evidence_status;
+    document.getElementById('cockpitEvidenceStatus').innerText = cockpit.complaint?.evidence_status || cockpit.evidence?.evidence_status || 'PENDING';
     const filesList = Array.isArray(cockpit.evidence)
       ? cockpit.evidence
       : (cockpit.evidence?.files || []);

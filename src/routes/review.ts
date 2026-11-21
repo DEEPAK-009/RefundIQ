@@ -156,10 +156,13 @@ reviewRouter.get('/:requestId', async (req: Request, res: Response): Promise<voi
         },
         complaint: {
           category: dispute.issue_category,
+          issue_category: dispute.issue_category,
           affected_items: dispute.affected_items,
+          claimed_items: dispute.affected_items,
           customer_description: dispute.customer_description,
           requested_resolution: dispute.requested_resolution,
           extracted_complaint: dispute.extracted_complaint,
+          evidence_status: dispute.evidence_status,
         },
         evidence: {
           evidence_status: dispute.evidence_status,
