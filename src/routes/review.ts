@@ -15,6 +15,30 @@ const reviewerActionSchema = z.object({
 });
 
 /**
+ * Step 7.3: Global Audit Trail Explorer
+ * Endpoint: GET /api/review/audit-all
+ * Returns recent append-only audit trail entries across all disputes
+ */
+reviewRouter.get('/audit-all', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await query(
+      `SELECT a.id, a.refund_request_id, a.event_type, a.actor, a.refund_amount, a.payload, a.created_at
+       FROM refund_audit_logs a
+       ORDER BY a.created_at DESC
+       LIMIT 50`
+    );
+
+    res.json({
+      success: true,
+      audit_logs: result.rows,
+    });
+  } catch (error) {
+    console.error('Error fetching global audit trail:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve audit logs.' });
+  }
+});
+
+/**
  * Step 7.1: Reviewer Queue
  * Endpoint: GET /api/review/queue
  * Returns all disputes waiting in the Human Review Queue (status = 'ESCALATED')

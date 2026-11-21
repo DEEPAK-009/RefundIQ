@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import { env } from './config/index.js';
+import path from 'path';
+import { env, storagePath } from './config/index.js';
 import { ordersRouter } from './routes/orders.js';
 import { refundsRouter } from './routes/refunds.js';
 import { reviewRouter } from './routes/review.js';
@@ -10,6 +11,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static frontend assets
+app.use(express.static(path.resolve(process.cwd(), 'public')));
+
+// Serve uploaded evidence photos securely for UI inspection
+app.use('/uploads', express.static(storagePath));
 
 // Health Check
 app.get('/health', (req, res) => {

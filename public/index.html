@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RefundIQ — Autonomous Food Delivery Dispute Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .badge-submitted { background-color: #fef3c7; color: #92400e; }
+    .badge-processing { background-color: #dbeafe; color: #1e40af; }
+    .badge-auto_approved { background-color: #dcfce7; color: #166534; }
+    .badge-manually_approved { background-color: #dcfce7; color: #166534; }
+    .badge-escalated { background-color: #fee2e2; color: #991b1b; }
+    .badge-auto_declined { background-color: #f3f4f6; color: #374151; }
+    .badge-manually_rejected { background-color: #f3f4f6; color: #374151; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- Top Navbar -->
+  <header class="bg-slate-900 text-white shadow-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="bg-amber-500 text-slate-950 p-2 rounded-lg font-black text-xl flex items-center justify-center w-10 h-10 shadow">
+          <i class="fa-solid fa-burger"></i>
+        </div>
+        <div>
+          <span class="font-bold text-xl tracking-tight text-white">Refund<span class="text-amber-400">IQ</span></span>
+          <span class="text-xs bg-slate-800 text-amber-300 px-2 py-0.5 rounded ml-2 border border-slate-700">AI Defense-in-Depth</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex space-x-1 sm:space-x-2 bg-slate-800/80 p-1 rounded-xl border border-slate-700">
+        <button id="tabBtnCustomer" onclick="switchView('customer')" class="px-4 py-1.5 rounded-lg text-sm font-medium transition bg-amber-500 text-slate-950 shadow">
+          <i class="fa-solid fa-user mr-1.5"></i> Customer Portal
+        </button>
+        <button id="tabBtnReviewer" onclick="switchView('reviewer')" class="px-4 py-1.5 rounded-lg text-sm font-medium transition text-slate-300 hover:text-white relative">
+          <i class="fa-solid fa-shield-halved mr-1.5"></i> Reviewer Cockpit
+          <span id="queueBadge" class="hidden ml-1.5 px-2 py-0.2 bg-red-500 text-white text-xs font-bold rounded-full">0</span>
+        </button>
+        <button id="tabBtnAudit" onclick="switchView('audit')" class="px-4 py-1.5 rounded-lg text-sm font-medium transition text-slate-300 hover:text-white">
+          <i class="fa-solid fa-list-check mr-1.5"></i> Audit Trail
+        </button>
+      </nav>
+
+      <!-- Customer Persona Selector -->
+      <div class="flex items-center space-x-2 text-xs">
+        <span class="text-slate-400 hidden md:inline">Logged in as:</span>
+        <select id="customerSelect" onchange="changeCustomer(this.value)" class="bg-slate-800 text-white border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-amber-500 outline-none">
+          <option value="CUST101">Deepak Reddy (Normal - 8% Dispute Rate)</option>
+          <option value="CUST102">Rahul Sharma (VIP - 8% Dispute Rate)</option>
+          <option value="CUST103">Suspicious User (High Risk - 67% Dispute Rate)</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+
+    <!-- ==================== VIEW 1: CUSTOMER DISPUTE PORTAL ==================== -->
+    <div id="customerView" class="space-y-8">
+      
+      <div class="flex items-center justify-between pb-4 border-b border-slate-200">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900">Order History & Dispute Intake</h1>
+          <p class="text-sm text-slate-500">Step 1 & 2: Trust separation — select a delivered order to file a verified dispute.</p>
+        </div>
+        <button onclick="loadOrders()" class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg transition font-medium">
+          <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh Orders
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <!-- Left: Customer Orders List -->
+        <div class="lg:col-span-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-slate-800 text-sm uppercase tracking-wider">1. Select Delivered Order</h2>
+            <span class="text-xs text-slate-500">Authoritative PostgreSQL Data</span>
+          </div>
+          <div id="ordersList" class="space-y-3">
+            <div class="p-8 text-center text-slate-400">Loading orders...</div>
+          </div>
+        </div>
+
+        <!-- Right: Dispute Form and Active Tracking -->
+        <div class="lg:col-span-7 space-y-6">
+
+          <!-- Refund Dispute Form -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <h2 class="font-bold text-lg text-slate-900">2. File Refund Dispute</h2>
+                <p class="text-xs text-slate-500">Backend strictly enforces zero-trust: Prices are calculated from server records.</p>
+              </div>
+              <span id="selectedOrderBadge" class="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-medium">No Order Selected</span>
+            </div>
+
+            <form id="disputeForm" onsubmit="submitDispute(event)" class="space-y-5">
+              <input type="hidden" id="selectedOrderId" name="order_id" required>
+
+              <!-- Issue Category -->
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Issue Category</label>
+                <select id="issueCategory" name="issue_category" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+                  <option value="missing_item">Missing Item(s) in delivery</option>
+                  <option value="damaged_spilled">Damaged or Spilled Food</option>
+                  <option value="wrong_item">Wrong Item Delivered</option>
+                  <option value="food_quality">Food Quality or Cold Food</option>
+                  <option value="not_delivered">Order Not Delivered</option>
+                  <option value="other">Other Issue</option>
+                </select>
+              </div>
+
+              <!-- Affected Items Selector -->
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider">Affected Food Items (Multi-select)</label>
+                  <span class="text-xs text-slate-400">Required for itemized partial refunds</span>
+                </div>
+                <div id="itemsCheckboxes" class="bg-slate-50 border border-slate-200 rounded-xl p-3 max-h-40 overflow-y-auto space-y-2 text-sm text-slate-500">
+                  Select an order on the left to see itemized bill.
+                </div>
+              </div>
+
+              <!-- Description -->
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Customer Explanation</label>
+                <textarea id="disputeDescription" name="description" rows="3" required placeholder="Describe what was missing or damaged..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-amber-500 outline-none"></textarea>
+              </div>
+
+              <!-- Requested Resolution -->
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Requested Resolution</label>
+                <div class="grid grid-cols-2 gap-4">
+                  <label class="border border-slate-200 rounded-xl p-3 flex items-center space-x-3 cursor-pointer hover:bg-slate-50 transition">
+                    <input type="radio" name="requested_resolution" value="partial_refund" checked class="text-amber-500 focus:ring-amber-500">
+                    <div>
+                      <span class="block text-sm font-medium text-slate-800">Partial Refund</span>
+                      <span class="block text-xs text-slate-400">Refund cost of affected items</span>
+                    </div>
+                  </label>
+                  <label class="border border-slate-200 rounded-xl p-3 flex items-center space-x-3 cursor-pointer hover:bg-slate-50 transition">
+                    <input type="radio" name="requested_resolution" value="full_refund" class="text-amber-500 focus:ring-amber-500">
+                    <div>
+                      <span class="block text-sm font-medium text-slate-800">Full Refund</span>
+                      <span class="block text-xs text-slate-400">Refund entire order total</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Evidence Upload -->
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Upload Photo Evidence</label>
+                <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center hover:border-amber-500 transition cursor-pointer relative bg-slate-50/50">
+                  <input type="file" id="evidenceFiles" name="evidence" accept="image/*" multiple class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                  <div class="space-y-1">
+                    <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400"></i>
+                    <p class="text-xs font-medium text-slate-700">Click to choose photos or drag and drop</p>
+                    <p class="text-xs text-slate-400">PNG, JPG, or WebP up to 10MB (Max 5 photos)</p>
+                  </div>
+                </div>
+                <div id="fileListPreview" class="text-xs text-slate-600 mt-2 space-y-1"></div>
+              </div>
+
+              <!-- Submit Button -->
+              <button type="submit" id="submitDisputeBtn" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-3 rounded-xl shadow transition flex items-center justify-center space-x-2">
+                <span>Submit Dispute (Async HTTP 202)</span>
+                <i class="fa-solid fa-arrow-right"></i>
+              </button>
+            </form>
+          </div>
+
+          <!-- Live Dispute Tracking Card -->
+          <div id="trackingContainer" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <span class="text-xs uppercase tracking-wider text-slate-400 font-bold">Live Dispute Tracker</span>
+                <h3 id="trackingRequestId" class="text-xl font-bold text-slate-900 mt-0.5">REF...</h3>
+              </div>
+              <div id="trackingStatusBadge" class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                SUBMITTED
+              </div>
+            </div>
+
+            <!-- Pipeline Status Visual Steps -->
+            <div class="grid grid-cols-4 gap-2 text-center text-xs">
+              <div id="stepIntake" class="p-2 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-200">
+                1. Intake (202)
+              </div>
+              <div id="stepAI" class="p-2 rounded-lg bg-slate-100 text-slate-600 font-medium">
+                2. AI Extraction
+              </div>
+              <div id="stepRAG" class="p-2 rounded-lg bg-slate-100 text-slate-600 font-medium">
+                3. Policy RAG
+              </div>
+              <div id="stepGuardrails" class="p-2 rounded-lg bg-slate-100 text-slate-600 font-medium">
+                4. Guardrails & Exec
+              </div>
+            </div>
+
+            <!-- Dynamic Details Section -->
+            <div id="trackingDetails" class="space-y-4 text-xs text-slate-600">
+              <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="font-semibold text-slate-700">Calculated Refund Amount:</span>
+                  <span id="trackingAmount" class="font-bold text-base text-slate-900">₹0.00</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="font-semibold text-slate-700">Evidence Status:</span>
+                  <span id="trackingEvidenceStatus" class="font-semibold text-amber-600">PENDING</span>
+                </div>
+                <div id="trackingEscalationRow" class="hidden text-red-600 pt-2 border-t border-slate-200">
+                  <span class="font-bold">Escalation Cause:</span>
+                  <p id="trackingEscalationReason" class="mt-0.5 text-xs"></p>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex justify-end space-x-2 pt-2">
+              <button onclick="pollCurrentDispute()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition">
+                <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh Status
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== VIEW 2: HUMAN REVIEWER COCKPIT ==================== -->
+    <div id="reviewerView" class="hidden space-y-8">
+      
+      <div class="flex items-center justify-between pb-4 border-b border-slate-200">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900">Human Reviewer Cockpit</h1>
+          <p class="text-sm text-slate-500">Step 7: Side-by-side inspection for ambiguous, inconclusive, or high-risk claims.</p>
+        </div>
+        <button onclick="loadReviewQueue()" class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg transition font-medium">
+          <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh Review Queue
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <!-- Left: Escalated Disputes Queue -->
+        <div class="lg:col-span-4 space-y-4">
+          <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-slate-800 text-sm uppercase tracking-wider">Escalated Queue</h2>
+            <span id="queueCountLabel" class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">0 Pending</span>
+          </div>
+          <div id="queueList" class="space-y-3">
+            <div class="p-8 text-center text-slate-400">Loading escalated queue...</div>
+          </div>
+        </div>
+
+        <!-- Right: Cockpit Side-by-Side Adjudication View -->
+        <div class="lg:col-span-8">
+          <div id="cockpitEmptyState" class="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 space-y-2">
+            <i class="fa-solid fa-folder-open text-4xl text-slate-300"></i>
+            <p class="text-sm font-medium">Select a dispute from the queue to open the adjudication cockpit.</p>
+          </div>
+
+          <div id="cockpitContainer" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+            
+            <!-- Cockpit Header -->
+            <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <span class="text-xs font-bold text-red-600 uppercase tracking-wider flex items-center">
+                  <i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Escalated Case Inspection
+                </span>
+                <h3 id="cockpitRequestId" class="text-xl font-bold text-slate-900 mt-1">REF...</h3>
+              </div>
+              <div class="text-right">
+                <span class="text-xs text-slate-400 block">Eligible Refund</span>
+                <span id="cockpitAmount" class="text-2xl font-black text-slate-900">₹0.00</span>
+              </div>
+            </div>
+
+            <!-- Escalation Notice Banner -->
+            <div class="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-800 text-xs">
+              <span class="font-bold block mb-1">Reason for Human Escalation:</span>
+              <p id="cockpitEscalationReason" class="leading-relaxed"></p>
+            </div>
+
+            <!-- Grid: Evidence Photos & Order Bill -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Itemized Bill -->
+              <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <h4 class="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center justify-between">
+                  <span>Authoritative Bill</span>
+                  <span id="cockpitRestaurantName" class="text-slate-500 font-medium"></span>
+                </h4>
+                <div id="cockpitBillItems" class="space-y-1.5 text-xs text-slate-600 max-h-36 overflow-y-auto"></div>
+                <div class="pt-2 border-t border-slate-200 flex justify-between text-xs font-bold">
+                  <span>Total Order Paid:</span>
+                  <span id="cockpitTotalPaid"></span>
+                </div>
+              </div>
+
+              <!-- Uploaded Evidence Viewer -->
+              <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <h4 class="font-bold text-xs uppercase tracking-wider text-slate-700">Uploaded Photo Evidence</h4>
+                <div id="cockpitEvidenceImages" class="flex space-x-2 overflow-x-auto py-1">
+                  <span class="text-xs text-slate-400">No photos uploaded.</span>
+                </div>
+                <div class="text-xs text-slate-500">
+                  <span class="font-semibold">Vision Forensic Status:</span>
+                  <span id="cockpitEvidenceStatus" class="ml-1 font-bold"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Recommendation & Policy RAG Citations -->
+            <div class="p-4 bg-amber-50/50 rounded-xl border border-amber-200/80 space-y-3 text-xs">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-amber-900 uppercase tracking-wider">AI Reasoning & Policy Citations</span>
+                <span id="cockpitAiDecisionBadge" class="px-2 py-0.5 rounded font-bold uppercase"></span>
+              </div>
+              <p id="cockpitAiReasoning" class="text-slate-700 italic"></p>
+              <div>
+                <span class="font-bold text-slate-700 block mb-1">Retrieved Policy Clauses:</span>
+                <div id="cockpitPolicyList" class="space-y-1"></div>
+              </div>
+            </div>
+
+            <!-- Reviewer Decision Form -->
+            <div class="p-5 bg-slate-900 text-white rounded-xl space-y-4">
+              <h4 class="font-bold text-sm uppercase tracking-wider text-amber-400">Reviewer Adjudication</h4>
+              
+              <div>
+                <label class="block text-xs text-slate-300 mb-1">Reviewer Mandatory Notes (Required for audit compliance):</label>
+                <textarea id="reviewerNotes" rows="2" placeholder="Explain your decision (e.g., Granted exception after verifying photo with restaurant)..." class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-1 focus:ring-amber-500 outline-none"></textarea>
+              </div>
+
+              <div class="flex items-center justify-between pt-2">
+                <div class="flex items-center space-x-2 text-xs">
+                  <span class="text-slate-400">Refund Amount:</span>
+                  <input type="number" id="reviewerOverrideAmount" class="w-24 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-xs font-bold">
+                </div>
+
+                <div class="flex space-x-2">
+                  <button onclick="submitReviewerAction('REQUEST_INFO')" class="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition">
+                    Request Info
+                  </button>
+                  <button onclick="submitReviewerAction('REJECT')" class="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
+                    Reject Claim
+                  </button>
+                  <button onclick="submitReviewerAction('APPROVE')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1.5 shadow">
+                    <i class="fa-solid fa-check"></i>
+                    <span>Approve & Execute Refund</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== VIEW 3: LIVE AUDIT TRAIL ==================== -->
+    <div id="auditView" class="hidden space-y-6">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-200">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900">Append-Only Audit Ledger</h1>
+          <p class="text-sm text-slate-500">Every dispute submission, AI extraction, guardrail trigger, and payment execution is tamper-proof.</p>
+        </div>
+        <button onclick="loadGlobalAuditLogs()" class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg transition font-medium">
+          <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh Ledger
+        </button>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-200 text-xs">
+            <thead class="bg-slate-50 text-slate-500 text-left font-semibold uppercase tracking-wider">
+              <tr>
+                <th class="px-6 py-3">Timestamp</th>
+                <th class="px-6 py-3">Dispute ID</th>
+                <th class="px-6 py-3">Event Type</th>
+                <th class="px-6 py-3">Actor</th>
+                <th class="px-6 py-3">Amount</th>
+                <th class="px-6 py-3">Payload Details</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody" class="divide-y divide-slate-200">
+              <tr><td colspan="6" class="px-6 py-8 text-center text-slate-400">Loading audit trail...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400">
+    RefundIQ — Autonomous Multimodal Dispute Resolution System | Powered by Node.js, pgvector, BullMQ & Gemini
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

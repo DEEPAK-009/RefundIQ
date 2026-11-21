@@ -5,10 +5,11 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch src/server.ts",
+    "dev": "concurrently -n \"API,WORKER\" -c \"blue,magenta\" \"tsx watch src/server.ts\" \"tsx watch src/worker.ts\"",
+    "dev:api": "tsx watch src/server.ts",
     "dev:worker": "tsx watch src/worker.ts",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:seed": "tsx src/db/seed.ts",
+    "db:seed": "tsx src/db/seedOrders.ts && tsx src/db/seedPolicies.ts",
     "services:up": "docker compose up -d",
     "services:down": "docker compose down"
   },
@@ -43,6 +44,7 @@
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "@types/uuid": "^10.0.0",
+    "concurrently": "^10.0.7",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
