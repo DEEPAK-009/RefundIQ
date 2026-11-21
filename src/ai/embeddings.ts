@@ -18,8 +18,9 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         contents: cleanText,
       });
 
-      if (response.embedding?.values && response.embedding.values.length === EMBEDDING_DIMENSION) {
-        return response.embedding.values;
+      const values = (response as any).embedding?.values || response.embeddings?.[0]?.values;
+      if (values && values.length === EMBEDDING_DIMENSION) {
+        return values;
       }
     } catch (err) {
       console.warn('⚠️ Gemini embedding API failed, falling back to deterministic local embedding:', err);

@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { Worker, Job } from 'bullmq';
 import { REDIS_CONNECTION, REFUND_QUEUE_NAME, RefundJobPayload } from './refundQueue.js';
 import { query, dbPool } from '../db/index.js';
@@ -11,6 +12,7 @@ import { evaluateGuardrails, GuardrailEvaluation, CustomerRiskProfile } from '..
 import { executePaymentGatewayRefund } from '../execution/paymentGateway.js';
 import { sendCustomerNotification } from '../execution/notifications.js';
 import { broadcastDisputeEvent } from '../events/eventBus.js';
+import { analyzeImageForensics, ImageForensicResult } from '../utils/imageForensics.js';
 
 /**
  * BullMQ Worker Processor (Steps 3, 4, 5, 6 & 7)
@@ -90,6 +92,18 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
   };
 
   const evidenceFilesRes = await query(`SELECT * FROM refund_evidence WHERE refund_request_id = $1`, [requestId]);
+
+  // Zero-Token Local Image Forensics Analysis (Detects internet downloads / screenshots)
+  console.log(`🔎 [Forensics] Running local 0-token EXIF & provenance analysis on ${evidenceFilesRes.rows.length} image(s)...`);
+  const imageForensicsReports: ImageForensicResult[] = [];
+  for (const file of evidenceFilesRes.rows) {
+    if (file.file_path && fs.existsSync(file.file_path)) {
+      const report = await analyzeImageForensics(file.file_path);
+      imageForensicsReports.push(report);
+      console.log(`   📸 [Forensics] ${file.original_filename}: ${report.classification} — ${report.summary}`);
+    }
+  }
+  const primaryForensics = imageForensicsReports[0];
 
   // 3. Parallel AI Extractions (Step 3)
   console.log(`🧠 [AI] Running Complaint Understanding (Text LLM)...`);
@@ -187,7 +201,8 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
     citationValidation,
     crossCheckResult,
     authoritativeOrder,
-    customerProfile
+    customerProfile,
+    primaryForensics
   );
 
   console.log(`   Final Routing Decision: [${guardrails.final_routing}]`);
@@ -225,7 +240,7 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
       [
         newStatus,
         JSON.stringify(complaintExtraction),
-        JSON.stringify(evidenceExtractions),
+        JSON.stringify({ extractions: evidenceExtractions, forensics: imageForensicsReports }),
         crossCheckResult.evidence_status,
         JSON.stringify(retrievedPolicies),
         JSON.stringify(recommendation),

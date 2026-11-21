@@ -2,6 +2,7 @@ import { AgentRecommendation } from '../ai/reasoningAgent.js';
 import { CitationValidationResult } from '../ai/citationValidator.js';
 import { CrossCheckResult, AuthoritativeOrder } from '../ai/crossCheck.js';
 import { env } from '../config/index.js';
+import { ImageForensicResult } from '../utils/imageForensics.js';
 
 export interface CustomerRiskProfile {
   id: string;
@@ -36,7 +37,8 @@ export function evaluateGuardrails(
   citationValidation: CitationValidationResult,
   crossCheck: CrossCheckResult,
   order: AuthoritativeOrder,
-  customer: CustomerRiskProfile
+  customer: CustomerRiskProfile,
+  forensics?: ImageForensicResult
 ): GuardrailEvaluation {
   const checks: GuardrailCheckResult[] = [];
   const escalationReasons: string[] = [];
@@ -201,6 +203,23 @@ export function evaluateGuardrails(
   // 10. Claim window guard
   if (!crossCheck.within_claim_window) {
     escalationReasons.push('Dispute reported outside 24-hour delivery window.');
+  }
+
+  // 11. Zero-Token Image Forensics & Origin Guard (Detects internet downloads / screenshots)
+  if (forensics) {
+    const isAuthentic = forensics.isCameraCaptured;
+    const isWebOrEdited = forensics.classification !== 'AUTHENTIC_CAMERA_CAPTURE';
+
+    checks.push({
+      name: 'IMAGE_AUTHENTICITY_FORENSICS_GUARD',
+      passed: isAuthentic,
+      action_taken: isWebOrEdited ? 'ROUTE_HUMAN_REVIEW' : 'PROCEED',
+      details: forensics.summary,
+    });
+
+    if (isWebOrEdited) {
+      escalationReasons.push(`Forensic metadata warning: ${forensics.summary}`);
+    }
   }
 
   // Final Routing Synthesis:

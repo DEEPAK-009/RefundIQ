@@ -236,7 +236,7 @@ refundsRouter.post(
 refundsRouter.get('/:requestId', async (req: Request, res: Response): Promise<void> => {
   try {
     const customerId = req.customer!.id;
-    const { requestId } = req.params;
+    const requestId = String(req.params.requestId);
 
     const requestResult = await query(
       `SELECT r.*, o.total_amount AS order_total, rest.name AS restaurant_name
@@ -352,7 +352,7 @@ refundsRouter.post(
   verifyUploadedFilesIntegrity,
   async (req: Request, res: Response): Promise<void> => {
     const customerId = req.customer!.id;
-    const { requestId } = req.params;
+    const requestId = String(req.params.requestId);
     const customerNotes = req.body.customer_notes?.trim() || '';
     const files = (req.files as Express.Multer.File[]) || [];
 

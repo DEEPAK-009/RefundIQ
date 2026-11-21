@@ -91,7 +91,7 @@ reviewRouter.get('/queue', async (req: Request, res: Response): Promise<void> =>
  */
 reviewRouter.get('/:requestId', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { requestId } = req.params;
+    const requestId = String(req.params.requestId);
 
     const requestRes = await query(
       `SELECT r.*, c.name AS customer_name, c.email AS customer_email, c.refund_rate, c.total_orders,
@@ -164,14 +164,23 @@ reviewRouter.get('/:requestId', async (req: Request, res: Response): Promise<voi
         evidence: {
           evidence_status: dispute.evidence_status,
           extracted_evidence: dispute.extracted_evidence,
-          files: evidenceRes.rows.map((f) => ({
-            id: f.id,
-            filename: f.original_filename,
-            stored_path: f.file_path,
-            mime_type: f.mime_type,
-            size_bytes: f.file_size_bytes,
-            sha256_hash: f.sha256_hash,
-          })),
+          files: evidenceRes.rows.map((f, idx) => {
+            const parsedEvidence = typeof dispute.extracted_evidence === 'string'
+              ? JSON.parse(dispute.extracted_evidence)
+              : dispute.extracted_evidence;
+            const forensicsList = parsedEvidence?.forensics;
+            return {
+              id: f.id,
+              filename: f.original_filename,
+              stored_filename: f.stored_filename,
+              file_url: `/uploads/${f.stored_filename}`,
+              stored_path: f.file_path,
+              mime_type: f.mime_type,
+              size_bytes: f.file_size_bytes,
+              sha256_hash: f.sha256_hash,
+              forensics: Array.isArray(forensicsList) ? forensicsList[idx] : undefined,
+            };
+          }),
         },
         ai_recommendation: dispute.agent_recommendation,
         citation_validation: dispute.citation_validation,
@@ -198,7 +207,7 @@ reviewRouter.get('/:requestId', async (req: Request, res: Response): Promise<voi
  */
 reviewRouter.post('/:requestId/action', reviewActionLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
-    const { requestId } = req.params;
+    const requestId = String(req.params.requestId);
 
     const validation = reviewerActionSchema.safeParse(req.body);
     if (!validation.success) {

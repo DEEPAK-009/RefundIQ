@@ -205,7 +205,7 @@ function renderChatGreeting(customerName) {
         <i class="fa-solid fa-robot"></i>
       </div>
       <div class="max-w-lg bg-white rounded-2xl rounded-tl-sm p-4 border border-slate-200 shadow-sm space-y-2 text-xs text-slate-800">
-        <p class="font-semibold text-slate-900">Hello ${customerName}! 👋</p>
+        <p class="font-semibold text-slate-900">Hello ${customerName}!</p>
         <p>I'm your <strong>RefundIQ Support Assistant</strong>. I can help resolve issues with your delivered food orders, process refunds, or connect you with our claims team.</p>
         <p class="text-slate-500">Please choose an order from the left to report an issue, or click any past dispute to see its latest status.</p>
       </div>
@@ -270,19 +270,19 @@ function renderIssueCategoryChips() {
       <span class="block text-2xs uppercase tracking-wider font-bold text-slate-500">Select Issue Category:</span>
       <div class="flex flex-wrap gap-2">
         <button onclick="selectChatIssue('missing_item', 'Missing item(s) in delivery')" class="px-3 py-2 bg-slate-100 hover:bg-amber-100 hover:border-amber-400 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 transition flex items-center space-x-1.5">
-          <span>🍟</span><span>Missing item(s)</span>
+          <i class="fa-solid fa-utensils"></i><span>Missing item(s)</span>
         </button>
         <button onclick="selectChatIssue('damaged_spilled', 'Damaged or spilled food')" class="px-3 py-2 bg-slate-100 hover:bg-amber-100 hover:border-amber-400 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 transition flex items-center space-x-1.5">
-          <span>📦</span><span>Damaged / Spilled Food</span>
+          <i class="fa-solid fa-box-open"></i><span>Damaged / Spilled Food</span>
         </button>
         <button onclick="selectChatIssue('wrong_item', 'Wrong item delivered')" class="px-3 py-2 bg-slate-100 hover:bg-amber-100 hover:border-amber-400 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 transition flex items-center space-x-1.5">
-          <span>🍱</span><span>Wrong Item Delivered</span>
+          <i class="fa-solid fa-repeat"></i><span>Wrong Item Delivered</span>
         </button>
         <button onclick="selectChatIssue('food_quality', 'Food quality or cold food')" class="px-3 py-2 bg-slate-100 hover:bg-amber-100 hover:border-amber-400 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 transition flex items-center space-x-1.5">
-          <span>❄️</span><span>Food Quality / Cold</span>
+          <i class="fa-solid fa-snowflake"></i><span>Food Quality / Cold</span>
         </button>
         <button onclick="selectChatIssue('other', 'Other issue')" class="px-3 py-2 bg-slate-100 hover:bg-amber-100 hover:border-amber-400 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 transition flex items-center space-x-1.5">
-          <span>❓</span><span>Other Issue</span>
+          <i class="fa-solid fa-circle-question"></i><span>Other Issue</span>
         </button>
       </div>
     </div>
@@ -358,6 +358,7 @@ function renderDisputeSubmissionTray() {
           <label class="block text-2xs uppercase tracking-wider font-bold text-slate-500 mb-1">
             Attach Photo Evidence <span class="text-amber-600 font-semibold">(Images only)</span>:
           </label>
+          <!-- capture="environment" (Keep commented out during local testing; uncomment to force mobile camera) -->
           <input type="file" id="chatEvidenceFiles" accept="image/png, image/jpeg, image/webp" multiple required class="text-xs text-slate-600 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-white hover:file:bg-slate-900 cursor-pointer w-full">
         </div>
       </div>
@@ -570,7 +571,7 @@ function setupRealtimeEventStream(requestId) {
     currentEventSource.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data);
-        console.log('⚡ [SSE Event]:', event);
+        console.log('[SSE Event]:', event);
 
         if (event.stage) {
           updatePipelineStageVisual(event.stage);
@@ -668,6 +669,7 @@ function renderChatShortUpdate(refund) {
           </p>
           <form onsubmit="submitSupplementalFromChat(event)" class="space-y-2 pt-1">
             <label class="block text-2xs uppercase tracking-wider font-bold text-amber-900">Upload Requested Photo (Images only):</label>
+            <!-- capture="environment" (Keep commented out during local testing; uncomment to force mobile camera) -->
             <input type="file" id="chatActionRequiredFile" accept="image/png, image/jpeg, image/webp" multiple required class="text-xs text-slate-700 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-600 file:text-white cursor-pointer w-full">
             <button type="submit" id="chatActionRequiredBtn" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-1.5 rounded-lg text-xs transition shadow flex items-center justify-center space-x-1.5">
               <span>Submit Requested Photo & Re-open Review</span>
@@ -972,7 +974,7 @@ async function loadReviewQueue() {
     if (queueCountLabel) queueCountLabel.innerText = `${count} Pending`;
 
     if (count === 0) {
-      queueList.innerHTML = '<div class="p-8 bg-white rounded-xl border border-slate-200 text-center text-slate-400 text-xs">No pending disputes in queue. All caught up! 🎉</div>';
+      queueList.innerHTML = '<div class="p-8 bg-white rounded-xl border border-slate-200 text-center text-slate-400 text-xs">No pending disputes in queue. All caught up!</div>';
       return;
     }
 
@@ -1065,18 +1067,34 @@ async function openCockpitDetail(requestId) {
     // Evidence Gallery
     const gallery = document.getElementById('cockpitEvidenceGallery');
     document.getElementById('cockpitEvidenceStatus').innerText = cockpit.complaint.evidence_status;
-    if (cockpit.evidence && cockpit.evidence.length > 0) {
-      gallery.innerHTML = cockpit.evidence
-        .map(
-          (e) => `
-          <div class="border rounded-lg p-2 bg-white text-center space-y-1">
+    const filesList = Array.isArray(cockpit.evidence)
+      ? cockpit.evidence
+      : (cockpit.evidence?.files || []);
+
+    if (filesList.length > 0) {
+      gallery.innerHTML = filesList
+        .map((e) => {
+          let provenanceBadge = '';
+          if (e.forensics) {
+            if (e.forensics.classification === 'AUTHENTIC_CAMERA_CAPTURE') {
+              provenanceBadge = `<span class="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded block truncate" title="${e.forensics.summary}"><i class="fa-solid fa-camera mr-1"></i>${e.forensics.cameraMake || ''} ${e.forensics.cameraModel || 'Camera'}</span>`;
+            } else if (e.forensics.classification === 'EDITED_OR_GENERATED') {
+              provenanceBadge = `<span class="text-[9px] bg-rose-100 text-rose-800 font-bold px-1.5 py-0.5 rounded block truncate" title="${e.forensics.summary}"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Edited / Synthetic</span>`;
+            } else {
+              provenanceBadge = `<span class="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded block truncate" title="${e.forensics.summary}"><i class="fa-solid fa-globe mr-1"></i>Web / No EXIF</span>`;
+            }
+          }
+
+          return `
+          <div class="border rounded-lg p-2 bg-white text-center space-y-1.5 shadow-sm">
             <a href="${e.file_url}" target="_blank" class="block">
               <img src="${e.file_url}" alt="Evidence" class="h-28 w-full object-cover rounded bg-slate-100 hover:opacity-90 transition">
             </a>
-            <span class="text-[10px] text-slate-500 block truncate" title="${e.original_filename}">${e.original_filename}</span>
+            <span class="text-[10px] text-slate-600 font-medium block truncate" title="${e.filename || e.original_filename}">${e.filename || e.original_filename}</span>
+            ${provenanceBadge}
           </div>
-        `
-        )
+        `;
+        })
         .join('');
     } else {
       gallery.innerHTML = '<span class="text-xs text-slate-400">No photos uploaded.</span>';
