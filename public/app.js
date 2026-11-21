@@ -6,6 +6,7 @@ let selectedOrder = null;
 let currentTrackingId = null;
 let pollInterval = null;
 let activeReviewDisputeId = null;
+let currentEventSource = null;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
@@ -298,7 +299,7 @@ function manualTrackDispute() {
   startLiveTracking(id);
 }
 
-// Start Live Polling for Dispute Tracker
+// Start Live Polling & Real-time Event Stream for Dispute Tracker
 function startLiveTracking(requestId) {
   currentTrackingId = requestId;
   const trackingContainer = document.getElementById('trackingContainer');
@@ -307,9 +308,88 @@ function startLiveTracking(requestId) {
 
   document.getElementById('trackingRequestId').innerText = requestId;
 
-  if (pollInterval) clearInterval(pollInterval);
+  // 1. Snapshot fetch
   pollCurrentDispute();
-  pollInterval = setInterval(pollCurrentDispute, 1500); // Poll every 1.5s
+
+  // 2. Open Real-time SSE Stream (Option 5)
+  setupRealtimeEventStream(requestId);
+
+  // 3. Keep fallback interval in case network proxy drops SSE
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(pollCurrentDispute, 3000);
+}
+
+// Option 5: Server-Sent Events (SSE) Real-Time Connection
+function setupRealtimeEventStream(requestId) {
+  if (currentEventSource) {
+    try {
+      currentEventSource.close();
+    } catch {}
+    currentEventSource = null;
+  }
+
+  if (!window.EventSource) return;
+
+  try {
+    currentEventSource = new EventSource(`/api/refunds/${requestId}/stream`);
+
+    currentEventSource.onmessage = (e) => {
+      try {
+        const event = JSON.parse(e.data);
+        console.log('⚡ [SSE Push Event]:', event);
+
+        // Immediate stage visual pulse
+        if (event.stage) {
+          updatePipelineStageVisual(event.stage);
+        }
+
+        // Auto-refresh snapshot on key state events
+        if (
+          event.type === 'STATUS_UPDATED' ||
+          event.type === 'REVIEW_ACTION' ||
+          event.type === 'ADDITIONAL_EVIDENCE_RECEIVED' ||
+          event.type === 'STAGE_CHANGE'
+        ) {
+          pollCurrentDispute();
+          loadCustomerDisputes();
+          loadReviewQueue();
+        }
+      } catch (err) {
+        console.warn('Error parsing SSE event data:', err);
+      }
+    };
+
+    currentEventSource.onerror = () => {
+      // Graceful fallback to HTTP polling if disconnected
+      console.log('SSE connection dropped or waiting. Polling remains active.');
+    };
+  } catch (err) {
+    console.warn('Failed to connect SSE EventSource:', err);
+  }
+}
+
+function updatePipelineStageVisual(stage) {
+  const stepIntake = document.getElementById('stepIntake');
+  const stepAI = document.getElementById('stepAI');
+  const stepRAG = document.getElementById('stepRAG');
+  const stepGuardrails = document.getElementById('stepGuardrails');
+
+  if (stage === 'INTAKE') {
+    stepIntake.className = 'p-2 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-200';
+  } else if (stage === 'AI_EXTRACTION') {
+    stepIntake.className = 'p-2 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-200';
+    stepAI.className = 'p-2 rounded-lg bg-amber-50 text-amber-700 font-medium border border-amber-200 animate-pulse';
+  } else if (stage === 'POLICY_RAG') {
+    stepAI.className = 'p-2 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-200';
+    stepRAG.className = 'p-2 rounded-lg bg-amber-50 text-amber-700 font-medium border border-amber-200 animate-pulse';
+  } else if (stage === 'GUARDRAILS') {
+    stepRAG.className = 'p-2 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-200';
+    stepGuardrails.className = 'p-2 rounded-lg bg-amber-50 text-amber-700 font-medium border border-amber-200 animate-pulse';
+  } else if (stage === 'COMPLETED') {
+    stepAI.className = 'p-2 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-200';
+    stepRAG.className = 'p-2 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-200';
+    stepGuardrails.className = 'p-2 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-200';
+  }
 }
 
 async function pollCurrentDispute() {

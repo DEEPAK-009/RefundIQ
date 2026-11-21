@@ -4,6 +4,7 @@ import { query } from '../db/index.js';
 import { executePaymentGatewayRefund } from '../execution/paymentGateway.js';
 import { sendCustomerNotification } from '../execution/notifications.js';
 import { reviewActionLimiter } from '../middleware/rateLimiter.js';
+import { broadcastDisputeEvent } from '../events/eventBus.js';
 
 export const reviewRouter = Router();
 
@@ -254,6 +255,14 @@ reviewRouter.post('/:requestId/action', reviewActionLimiter, async (req: Request
         timestamp: new Date().toISOString(),
       });
 
+      // Broadcast real-time approval event
+      await broadcastDisputeEvent({
+        requestId,
+        type: 'REVIEW_ACTION',
+        status: 'MANUALLY_APPROVED',
+        data: { action: 'APPROVED', amount: finalAmount, transaction_id: refundResult.transaction_id, notes },
+      });
+
       res.json({
         success: true,
         action: 'APPROVED',
@@ -305,6 +314,14 @@ reviewRouter.post('/:requestId/action', reviewActionLimiter, async (req: Request
         timestamp: new Date().toISOString(),
       });
 
+      // Broadcast real-time rejection event
+      await broadcastDisputeEvent({
+        requestId,
+        type: 'REVIEW_ACTION',
+        status: 'MANUALLY_REJECTED',
+        data: { action: 'REJECTED', notes },
+      });
+
       res.json({
         success: true,
         action: 'REJECTED',
@@ -351,6 +368,14 @@ reviewRouter.post('/:requestId/action', reviewActionLimiter, async (req: Request
         title: 'Additional Information Required',
         message: `Our review team needs additional details regarding order ${dispute.order_id}: ${notes}. Please update your dispute.`,
         timestamp: new Date().toISOString(),
+      });
+
+      // Broadcast real-time info request event
+      await broadcastDisputeEvent({
+        requestId,
+        type: 'REVIEW_ACTION',
+        status: 'ACTION_REQUIRED',
+        data: { action: 'REQUEST_INFO', notes },
       });
 
       res.json({

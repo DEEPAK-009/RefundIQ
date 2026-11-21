@@ -10,6 +10,7 @@ import { validateAgentCitations, CitationValidationResult } from '../ai/citation
 import { evaluateGuardrails, GuardrailEvaluation, CustomerRiskProfile } from '../guardrails/guardrailEngine.js';
 import { executePaymentGatewayRefund } from '../execution/paymentGateway.js';
 import { sendCustomerNotification } from '../execution/notifications.js';
+import { broadcastDisputeEvent } from '../events/eventBus.js';
 
 /**
  * BullMQ Worker Processor (Steps 3, 4, 5, 6 & 7)
@@ -29,6 +30,13 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
 
   // 1. Transition dispute status to 'PROCESSING'
   await query(`UPDATE refund_requests SET status = 'PROCESSING', updated_at = NOW() WHERE id = $1`, [requestId]);
+  await broadcastDisputeEvent({
+    requestId,
+    type: 'STAGE_CHANGE',
+    stage: 'AI_EXTRACTION',
+    status: 'PROCESSING',
+    data: { message: 'AI Worker started: Analyzing complaint and photo evidence' },
+  });
 
   // 2. Load dispute and authoritative database records
   const disputeRes = await query(`SELECT * FROM refund_requests WHERE id = $1`, [requestId]);
@@ -123,6 +131,17 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
 
   // 5. Runtime Semantic Policy Retrieval (RAG via pgvector) (Step 4)
   console.log(`🔍 [RAG] Performing semantic policy retrieval with pgvector cosine similarity...`);
+  await broadcastDisputeEvent({
+    requestId,
+    type: 'STAGE_CHANGE',
+    stage: 'POLICY_RAG',
+    status: 'PROCESSING',
+    data: {
+      evidence_status: crossCheckResult.evidence_status,
+      eligible_amount: crossCheckResult.eligible_refund_subtotal,
+    },
+  });
+
   const retrievedPolicies: RetrievedPolicyClause[] = await retrieveRelevantPolicies(
     complaintExtraction,
     crossCheckResult.evidence_status,
@@ -152,6 +171,17 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
 
   // 8. Deterministic Guardrail Layer (Step 6)
   console.log(`🚦 [Guardrails] Applying deterministic business rules & threshold limits...`);
+  await broadcastDisputeEvent({
+    requestId,
+    type: 'STAGE_CHANGE',
+    stage: 'GUARDRAILS',
+    status: 'PROCESSING',
+    data: {
+      recommendation: recommendation.decision,
+      clauses_used: recommendation.clauses_used,
+    },
+  });
+
   const guardrails: GuardrailEvaluation = evaluateGuardrails(
     recommendation,
     citationValidation,
@@ -228,6 +258,19 @@ export async function processRefundJob(job: Job<RefundJobPayload>) {
 
     await client.query('COMMIT');
     console.log(`💾 [Worker] Dispute ${requestId} routed to: ${guardrails.final_routing} (Status: ${newStatus}).`);
+
+    // Broadcast terminal evaluation result via SSE EventBus
+    await broadcastDisputeEvent({
+      requestId,
+      type: 'STATUS_UPDATED',
+      stage: 'COMPLETED',
+      status: newStatus,
+      data: {
+        final_routing: guardrails.final_routing,
+        final_refund_amount: guardrails.final_refund_amount,
+        escalation_reason: guardrails.escalation_reason || guardrails.decline_reason,
+      },
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(`❌ [Worker] Failed to persist worker results for ${requestId}:`, err);

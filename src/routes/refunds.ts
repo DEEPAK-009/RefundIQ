@@ -7,6 +7,7 @@ import { uploadEvidence, computeFileHash, verifyUploadedFilesIntegrity } from '.
 import { enqueueRefundAnalysis } from '../queue/refundQueue.js';
 import { disputeSubmissionLimiter } from '../middleware/rateLimiter.js';
 import { sendCustomerNotification } from '../execution/notifications.js';
+import { broadcastDisputeEvent, createRedisSubscriber } from '../events/eventBus.js';
 
 export const refundsRouter = Router();
 
@@ -191,6 +192,15 @@ refundsRouter.post(
     // 4. Async Job Enqueue via BullMQ + Redis
     await enqueueRefundAnalysis(requestId, order_id, customerId);
 
+    // Broadcast submission event via SSE EventBus
+    await broadcastDisputeEvent({
+      requestId,
+      type: 'DISPUTE_SUBMITTED',
+      stage: 'INTAKE',
+      status: 'SUBMITTED',
+      data: { order_id, issue_category, affected_items },
+    });
+
     // 5. Respond with HTTP 202 Accepted immediately
     res.status(202).json({
       success: true,
@@ -278,6 +288,56 @@ refundsRouter.get('/:requestId', async (req: Request, res: Response): Promise<vo
   } catch (error) {
     console.error('Error fetching refund tracking:', error);
     res.status(500).json({ success: false, error: 'Failed to retrieve refund dispute details.' });
+  }
+});
+
+/**
+ * Option 5: Real-time Server-Sent Events (SSE) Stream
+ * Endpoint: GET /api/refunds/:requestId/stream
+ * Streams instant push updates to the browser as the AI worker processes each pipeline stage.
+ */
+refundsRouter.get('/:requestId/stream', async (req: Request, res: Response): Promise<void> => {
+  const { requestId } = req.params;
+
+  // Set SSE Headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  // Send initial connection handshake event
+  res.write(`event: connected\ndata: ${JSON.stringify({ type: 'CONNECTED', requestId, timestamp: new Date().toISOString() })}\n\n`);
+
+  const subscriber = createRedisSubscriber();
+  const channel = `dispute:${requestId}`;
+
+  try {
+    await subscriber.connect();
+    await subscriber.subscribe(channel);
+
+    subscriber.on('message', (chan, message) => {
+      if (chan === channel) {
+        res.write(`data: ${message}\n\n`);
+      }
+    });
+
+    // 20s heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+      res.write(': heartbeat\n\n');
+    }, 20000);
+
+    req.on('close', async () => {
+      clearInterval(heartbeat);
+      try {
+        await subscriber.unsubscribe(channel);
+        subscriber.disconnect();
+      } catch {}
+    });
+  } catch (err) {
+    console.warn(`[SSE] Subscription error for ${requestId}:`, err);
+    res.write(`event: error\ndata: ${JSON.stringify({ error: 'SSE stream connection failed' })}\n\n`);
+    res.end();
   }
 });
 
@@ -393,6 +453,14 @@ refundsRouter.post(
         title: 'Supplemental Evidence Received',
         message: `Your additional evidence for order ${dispute.order_id} has been received and returned to the claims review queue.`,
         timestamp: new Date().toISOString(),
+      });
+
+      // Broadcast update via SSE
+      await broadcastDisputeEvent({
+        requestId,
+        type: 'ADDITIONAL_EVIDENCE_RECEIVED',
+        status: 'ESCALATED',
+        data: { files_count: files.length, customer_notes: customerNotes },
       });
 
       res.json({
