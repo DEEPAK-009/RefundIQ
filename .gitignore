@@ -39,6 +39,7 @@ storage/uploads/*
 !storage/uploads/.gitkeep
 storage/temp/*
 !storage/temp/.gitkeep
+*.svg
 
 # Docker volumes / persistence
 postgres_data/
