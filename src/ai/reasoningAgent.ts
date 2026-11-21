@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { genAI, isGeminiConfigured } from './geminiClient.js';
+import { genAI, isGeminiConfigured, ACTIVE_GEMINI_MODEL } from './geminiClient.js';
 import { AssembledReasoningContext } from './ragRetriever.js';
 
 export const AgentRecommendationSchema = z.object({
@@ -70,7 +70,7 @@ Return strictly valid JSON adhering to this exact schema:
   if (isGeminiConfigured() && genAI) {
     try {
       const response = await genAI.models.generateContent({
-        model: 'gemini-2.0-flash',
+        model: ACTIVE_GEMINI_MODEL,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',

@@ -77,19 +77,44 @@
 
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        <!-- Left: Customer Orders List -->
-        <div class="lg:col-span-5 space-y-4">
-          <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-slate-800 text-sm uppercase tracking-wider">1. Select Delivered Order</h2>
-            <span class="text-xs text-slate-500">Authoritative PostgreSQL Data</span>
+        <!-- Left: Customer Orders List & Past Disputes -->
+        <div class="lg:col-span-5 space-y-6">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <h2 class="font-semibold text-slate-800 text-sm uppercase tracking-wider">1. Select Delivered Order</h2>
+              <span class="text-xs text-slate-500">Authoritative PostgreSQL Data</span>
+            </div>
+            <div id="ordersList" class="space-y-3">
+              <div class="p-8 text-center text-slate-400">Loading orders...</div>
+            </div>
           </div>
-          <div id="ordersList" class="space-y-3">
-            <div class="p-8 text-center text-slate-400">Loading orders...</div>
+
+          <!-- Customer Past Disputes / History -->
+          <div class="pt-6 border-t border-slate-200 space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="font-semibold text-slate-800 text-sm uppercase tracking-wider">Your Submitted Disputes</h2>
+                <p class="text-xs text-slate-400">Click any dispute below to view live status & AI reasoning</p>
+              </div>
+              <span id="customerDisputesCount" class="text-xs font-bold px-2.5 py-0.5 bg-slate-200 text-slate-700 rounded-full">0</span>
+            </div>
+            <div id="customerDisputesList" class="space-y-2.5">
+              <div class="p-4 bg-white rounded-xl border border-slate-200 text-center text-slate-400 text-xs">Loading dispute history...</div>
+            </div>
           </div>
         </div>
 
         <!-- Right: Dispute Form and Active Tracking -->
         <div class="lg:col-span-7 space-y-6">
+
+          <!-- Quick Dispute Lookup by ID -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-3.5 flex items-center space-x-3">
+            <div class="text-slate-400 pl-1"><i class="fa-solid fa-magnifying-glass"></i></div>
+            <input type="text" id="manualTrackIdInput" placeholder="Enter Dispute ID to view results (e.g. REF231397C892)..." class="text-xs w-full bg-transparent outline-none text-slate-800 font-mono">
+            <button onclick="manualTrackDispute()" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold transition shrink-0">
+              Track Dispute
+            </button>
+          </div>
 
           <!-- Refund Dispute Form -->
           <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
@@ -207,19 +232,67 @@
 
             <!-- Dynamic Details Section -->
             <div id="trackingDetails" class="space-y-4 text-xs text-slate-600">
-              <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+              <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
                 <div class="flex items-center justify-between">
-                  <span class="font-semibold text-slate-700">Calculated Refund Amount:</span>
-                  <span id="trackingAmount" class="font-bold text-base text-slate-900">₹0.00</span>
+                  <span class="font-semibold text-slate-700">Final Calculated Refund:</span>
+                  <span id="trackingAmount" class="font-black text-lg text-emerald-600">₹0.00</span>
                 </div>
                 <div class="flex items-center justify-between">
                   <span class="font-semibold text-slate-700">Evidence Status:</span>
-                  <span id="trackingEvidenceStatus" class="font-semibold text-amber-600">PENDING</span>
+                  <span id="trackingEvidenceStatus" class="font-bold text-amber-600">PENDING</span>
                 </div>
-                <div id="trackingEscalationRow" class="hidden text-red-600 pt-2 border-t border-slate-200">
-                  <span class="font-bold">Escalation Cause:</span>
-                  <p id="trackingEscalationReason" class="mt-0.5 text-xs"></p>
+                <div class="flex items-center justify-between">
+                  <span class="font-semibold text-slate-700">Routing Decision:</span>
+                  <span id="trackingRoutingDecision" class="font-mono font-bold text-slate-800">EVALUATING</span>
                 </div>
+                <div id="trackingPaymentRow" class="hidden flex items-center justify-between pt-2 border-t border-slate-200">
+                  <span class="font-semibold text-slate-700">Payment Gateway ID:</span>
+                  <span id="trackingPaymentId" class="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">--</span>
+                </div>
+                <div id="trackingEscalationRow" class="hidden text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-200 mt-2">
+                  <span class="font-bold flex items-center"><i class="fa-solid fa-triangle-exclamation mr-1.5 text-amber-600"></i> Escalation / Decline Cause:</span>
+                  <p id="trackingEscalationReason" class="mt-1 text-xs text-amber-900 leading-relaxed"></p>
+                </div>
+              </div>
+
+              <!-- AI Reasoning & Citations Card -->
+              <div id="trackingReasoningCard" class="hidden p-4 bg-purple-50/60 rounded-xl border border-purple-200 space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="font-bold text-purple-900 text-xs flex items-center">
+                    <i class="fa-solid fa-brain mr-1.5 text-purple-600"></i> AI Reasoning & Policy Evaluation
+                  </span>
+                  <span id="trackingCitationBadge" class="text-[10px] bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full font-bold">Citations Validated</span>
+                </div>
+                <p id="trackingReasoningText" class="text-xs text-purple-950 italic leading-relaxed"></p>
+                <div id="trackingClausesList" class="pt-2 flex flex-wrap gap-1.5"></div>
+              </div>
+
+              <!-- Deterministic Guardrails Results Card -->
+              <div id="trackingGuardrailsCard" class="hidden p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="font-bold text-slate-800 text-xs flex items-center">
+                    <i class="fa-solid fa-traffic-light mr-1.5 text-indigo-600"></i> Deterministic Guardrail Checks
+                  </span>
+                  <span id="trackingGuardrailSummary" class="text-[10px] text-slate-500 font-medium">--</span>
+                </div>
+                <div id="trackingGuardrailsList" class="space-y-1.5 pt-1"></div>
+              </div>
+
+              <!-- Human Review Notes (if reviewed) -->
+              <div id="trackingReviewerCard" class="hidden p-4 bg-blue-50/80 rounded-xl border border-blue-200 space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <span class="font-bold text-blue-900 text-xs flex items-center">
+                    <i class="fa-solid fa-user-check mr-1.5 text-blue-600"></i> Human Review Decision
+                  </span>
+                  <span id="trackingReviewerDate" class="text-[10px] text-blue-600">--</span>
+                </div>
+                <p id="trackingReviewerNotes" class="text-xs text-blue-950 leading-relaxed"></p>
+              </div>
+
+              <!-- Live Audit Events -->
+              <div id="trackingAuditCard" class="p-3 bg-white rounded-xl border border-slate-200 space-y-1.5">
+                <span class="font-bold text-slate-700 text-[11px] block uppercase tracking-wider">Dispute Timeline</span>
+                <div id="trackingAuditTimeline" class="space-y-1 text-[11px] text-slate-600"></div>
               </div>
             </div>
 

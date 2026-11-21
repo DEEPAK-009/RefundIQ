@@ -1,14 +1,14 @@
 import fs from 'fs';
 import { z } from 'zod';
-import { genAI, isGeminiConfigured } from './geminiClient.js';
+import { genAI, isGeminiConfigured, ACTIVE_GEMINI_MODEL } from './geminiClient.js';
 
 export const ExtractedEvidenceSchema = z.object({
-  visible_food_items: z.array(z.string()),
-  packaging_and_containers: z.array(z.string()),
+  visible_food_items: z.array(z.string()).default([]),
+  packaging_and_containers: z.array(z.string()).default([]),
   visible_spillage_or_damage: z.boolean(),
-  damage_description: z.string().optional(),
+  damage_description: z.string().nullable().optional(),
   visible_mismatch: z.boolean(),
-  mismatch_description: z.string().optional(),
+  mismatch_description: z.string().nullable().optional(),
   readable_order_identifiers: z.array(z.string()).default([]),
   image_quality: z.enum(['high', 'medium', 'low', 'unclear']),
   analysis_confidence: z.enum(['high', 'medium', 'low']),
@@ -62,7 +62,7 @@ Return strictly valid JSON with this schema:
 }`;
 
       const response = await genAI.models.generateContent({
-        model: 'gemini-2.0-flash',
+        model: ACTIVE_GEMINI_MODEL,
         contents: [
           {
             role: 'user',

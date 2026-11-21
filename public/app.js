@@ -10,6 +10,7 @@ let activeReviewDisputeId = null;
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
   loadOrders();
+  loadCustomerDisputes();
   loadReviewQueue();
   setInterval(loadReviewQueue, 10000); // Check queue every 10s
 });
@@ -36,6 +37,7 @@ function switchView(viewName) {
   if (viewName === 'customer') {
     customerView.classList.remove('hidden');
     tabCustomer.className = 'px-4 py-1.5 rounded-lg text-sm font-medium transition bg-amber-500 text-slate-950 shadow';
+    loadCustomerDisputes();
   } else if (viewName === 'reviewer') {
     reviewerView.classList.remove('hidden');
     tabReviewer.className = 'px-4 py-1.5 rounded-lg text-sm font-medium transition bg-amber-500 text-slate-950 shadow relative';
@@ -55,6 +57,7 @@ function changeCustomer(newCustomerId) {
   document.getElementById('selectedOrderBadge').innerText = 'No Order Selected';
   document.getElementById('itemsCheckboxes').innerHTML = 'Select an order on the left to see itemized bill.';
   loadOrders();
+  loadCustomerDisputes();
 }
 
 // 1. Load Authoritative Orders for Active Customer (GET /api/orders)
@@ -204,6 +207,8 @@ async function submitDispute(event) {
       currentTrackingId = data.request_id;
       document.getElementById('disputeForm').reset();
       startLiveTracking(data.request_id);
+      loadCustomerDisputes();
+      loadOrders();
     } else {
       alert(`Submission rejected: ${data.error || 'Check submission details.'}`);
     }
@@ -213,6 +218,84 @@ async function submitDispute(event) {
     submitBtn.disabled = false;
     submitBtn.innerHTML = '<span>Submit Dispute (Async HTTP 202)</span><i class="fa-solid fa-arrow-right ml-2"></i>';
   }
+}
+
+// Load All Disputes Submitted by Active Customer (GET /api/refunds)
+async function loadCustomerDisputes() {
+  const container = document.getElementById('customerDisputesList');
+  const countBadge = document.getElementById('customerDisputesCount');
+  if (!container) return;
+
+  try {
+    const res = await fetch('/api/refunds', {
+      headers: { 'x-customer-id': currentCustomerId },
+    });
+    const data = await res.json();
+
+    if (!data.success || !data.refunds || data.refunds.length === 0) {
+      container.innerHTML = '<div class="p-4 bg-white rounded-xl border border-slate-200 text-center text-slate-400 text-xs">No disputes filed yet by this customer.</div>';
+      if (countBadge) countBadge.innerText = '0';
+      return;
+    }
+
+    if (countBadge) countBadge.innerText = data.refunds.length;
+    container.innerHTML = '';
+
+    data.refunds.forEach((r) => {
+      const isCurrent = currentTrackingId === r.id;
+      const card = document.createElement('div');
+      card.className = `p-3 rounded-xl border transition cursor-pointer flex items-center justify-between ${
+        isCurrent
+          ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-500/20'
+          : 'border-slate-200 bg-white hover:border-slate-300'
+      }`;
+      card.onclick = () => startLiveTracking(r.id);
+
+      const itemsStr = Array.isArray(r.affected_items) ? r.affected_items.join(', ') : r.affected_items;
+      const formattedDate = new Date(r.created_at).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      card.innerHTML = `
+        <div class="space-y-0.5">
+          <div class="flex items-center space-x-2">
+            <span class="font-mono font-bold text-xs text-slate-800">${r.id}</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase badge-${r.status.toLowerCase()}">${r.status.replace(/_/g, ' ')}</span>
+          </div>
+          <div class="text-[11px] text-slate-500">
+            <span>${r.restaurant_name} (${r.order_id})</span> • <span class="font-medium text-slate-700">${itemsStr}</span>
+          </div>
+          <div class="text-[10px] text-slate-400">
+            ${formattedDate}
+          </div>
+        </div>
+        <div class="text-right pl-3 shrink-0">
+          <span class="block font-bold text-xs text-emerald-600">₹${Number(r.final_refund_amount || 0).toFixed(2)}</span>
+          <span class="text-[10px] text-amber-600 hover:text-amber-700 font-semibold flex items-center justify-end mt-1">
+            Track <i class="fa-solid fa-chevron-right ml-1"></i>
+          </span>
+        </div>
+      `;
+      container.appendChild(card);
+    });
+  } catch (err) {
+    container.innerHTML = `<div class="p-3 bg-red-50 text-red-600 text-xs rounded-xl">Failed to load disputes: ${err.message}</div>`;
+  }
+}
+
+// Manual Dispute ID Tracking from search bar
+function manualTrackDispute() {
+  const input = document.getElementById('manualTrackIdInput');
+  if (!input) return;
+  const id = input.value.trim();
+  if (!id) {
+    alert('Please enter a Dispute ID (e.g. REF231397C892)');
+    return;
+  }
+  startLiveTracking(id);
 }
 
 // Start Live Polling for Dispute Tracker
@@ -248,17 +331,18 @@ async function pollCurrentDispute() {
         clearInterval(pollInterval);
       }
       loadReviewQueue(); // Refresh queue counter
+      loadCustomerDisputes(); // Refresh dispute history
     }
   } catch (err) {
     console.warn('Poll error:', err);
   }
 }
 
-// Render Tracking State in UI
+// Render Detailed Tracking State in UI
 function renderTrackingStatus(refund) {
   const badge = document.getElementById('trackingStatusBadge');
   badge.className = `px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider badge-${refund.status.toLowerCase()}`;
-  badge.innerText = refund.status.replace('_', ' ');
+  badge.innerText = refund.status.replace(/_/g, ' ');
 
   // Update pipeline visual step markers
   const stepIntake = document.getElementById('stepIntake');
@@ -268,24 +352,137 @@ function renderTrackingStatus(refund) {
 
   if (refund.status === 'SUBMITTED') {
     stepAI.className = 'p-2 rounded-lg bg-amber-50 text-amber-700 font-medium border border-amber-200 animate-pulse';
+    stepRAG.className = 'p-2 rounded-lg bg-slate-100 text-slate-600 font-medium';
+    stepGuardrails.className = 'p-2 rounded-lg bg-slate-100 text-slate-600 font-medium';
   } else if (refund.status === 'PROCESSING') {
     stepAI.className = 'p-2 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-200';
     stepRAG.className = 'p-2 rounded-lg bg-amber-50 text-amber-700 font-medium border border-amber-200 animate-pulse';
+    stepGuardrails.className = 'p-2 rounded-lg bg-slate-100 text-slate-600 font-medium';
   } else {
     stepAI.className = 'p-2 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-200';
     stepRAG.className = 'p-2 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-200';
     stepGuardrails.className = 'p-2 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-200';
   }
 
+  // Basic amounts and routing
   document.getElementById('trackingAmount').innerText = `₹${Number(refund.final_refund_amount || refund.suggested_refund_amount || 0).toFixed(2)}`;
-  document.getElementById('trackingEvidenceStatus').innerText = refund.evidence_status || 'ANALYZING...';
+  document.getElementById('trackingEvidenceStatus').innerText = refund.evidence_status || 'PENDING';
 
+  const routingEl = document.getElementById('trackingRoutingDecision');
+  if (routingEl) {
+    routingEl.innerText = refund.routing_decision || refund.status;
+  }
+
+  // Payment Gateway Row
+  const paymentRow = document.getElementById('trackingPaymentRow');
+  const paymentIdEl = document.getElementById('trackingPaymentId');
+  if (paymentRow && paymentIdEl) {
+    if (refund.payment_refund_id) {
+      paymentRow.classList.remove('hidden');
+      paymentIdEl.innerText = refund.payment_refund_id;
+    } else {
+      paymentRow.classList.add('hidden');
+    }
+  }
+
+  // Escalation / Decline Cause
   const escalationRow = document.getElementById('trackingEscalationRow');
   if (refund.escalation_reason) {
     escalationRow.classList.remove('hidden');
     document.getElementById('trackingEscalationReason').innerText = refund.escalation_reason;
   } else {
     escalationRow.classList.add('hidden');
+  }
+
+  // AI Reasoning Card & Citations
+  const reasoningCard = document.getElementById('trackingReasoningCard');
+  const reasoningText = document.getElementById('trackingReasoningText');
+  const clausesList = document.getElementById('trackingClausesList');
+  const citationBadge = document.getElementById('trackingCitationBadge');
+
+  if (reasoningCard && refund.agent_recommendation && refund.agent_recommendation.reasoning) {
+    reasoningCard.classList.remove('hidden');
+    reasoningText.innerText = `"${refund.agent_recommendation.reasoning}"`;
+
+    if (citationBadge && refund.citation_validation) {
+      if (refund.citation_validation.is_valid) {
+        citationBadge.className = 'text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold';
+        citationBadge.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Citations Verified';
+      } else {
+        citationBadge.className = 'text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded-full font-bold';
+        citationBadge.innerHTML = '<i class="fa-solid fa-xmark mr-1"></i> Citation Hallucination Flagged';
+      }
+    }
+
+    if (clausesList && Array.isArray(refund.retrieved_clauses)) {
+      clausesList.innerHTML = refund.retrieved_clauses
+        .map(
+          (c) => `
+          <span class="inline-flex items-center text-[10px] bg-purple-100 text-purple-800 font-mono font-medium px-2 py-0.5 rounded-md" title="${c.policy_text}">
+            <strong>${c.clause_id}</strong>: ${c.title}
+          </span>
+        `
+        )
+        .join('');
+    }
+  } else if (reasoningCard) {
+    reasoningCard.classList.add('hidden');
+  }
+
+  // Deterministic Guardrails Checklist
+  const guardrailsCard = document.getElementById('trackingGuardrailsCard');
+  const guardrailsSummary = document.getElementById('trackingGuardrailSummary');
+  const guardrailsList = document.getElementById('trackingGuardrailsList');
+
+  if (guardrailsCard && Array.isArray(refund.guardrail_results) && refund.guardrail_results.length > 0) {
+    guardrailsCard.classList.remove('hidden');
+    const passedCount = refund.guardrail_results.filter((g) => g.passed).length;
+    guardrailsSummary.innerText = `${passedCount}/${refund.guardrail_results.length} Passed`;
+
+    guardrailsList.innerHTML = refund.guardrail_results
+      .map(
+        (g) => `
+        <div class="flex items-start justify-between py-1 border-b border-slate-100 last:border-0 text-[11px]">
+          <div class="space-x-1.5 flex items-center">
+            <i class="fa-solid ${g.passed ? 'fa-circle-check text-emerald-500' : 'fa-circle-xmark text-amber-500'}"></i>
+            <span class="font-medium text-slate-700">${g.name.replace(/_/g, ' ')}</span>
+          </div>
+          <span class="text-[10px] font-mono text-slate-500 text-right max-w-[200px] truncate" title="${g.details}">${g.details}</span>
+        </div>
+      `
+      )
+      .join('');
+  } else if (guardrailsCard) {
+    guardrailsCard.classList.add('hidden');
+  }
+
+  // Reviewer Notes Card
+  const reviewerCard = document.getElementById('trackingReviewerCard');
+  const reviewerNotes = document.getElementById('trackingReviewerNotes');
+  const reviewerDate = document.getElementById('trackingReviewerDate');
+
+  if (reviewerCard && refund.reviewer_notes) {
+    reviewerCard.classList.remove('hidden');
+    reviewerNotes.innerText = refund.reviewer_notes;
+    reviewerDate.innerText = refund.reviewed_at ? new Date(refund.reviewed_at).toLocaleString() : '';
+  } else if (reviewerCard) {
+    reviewerCard.classList.add('hidden');
+  }
+
+  // Audit Events Timeline
+  const auditTimeline = document.getElementById('trackingAuditTimeline');
+  if (auditTimeline && Array.isArray(refund.audit_trail)) {
+    auditTimeline.innerHTML = refund.audit_trail
+      .map((ev) => {
+        const time = new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        return `
+          <div class="flex items-center justify-between py-0.5 border-b border-slate-100 last:border-0">
+            <span class="font-semibold text-slate-700"><span class="font-mono text-slate-400">[${time}]</span> ${ev.event_type} (${ev.actor})</span>
+            <span class="font-medium text-slate-500">${ev.refund_amount ? '₹' + Number(ev.refund_amount).toFixed(2) : ''}</span>
+          </div>
+        `;
+      })
+      .join('');
   }
 }
 
@@ -466,6 +663,7 @@ async function submitReviewerAction(action) {
       activeReviewDisputeId = null;
       loadReviewQueue();
       loadOrders();
+      loadCustomerDisputes();
     } else {
       alert(`Action failed: ${data.error}`);
     }

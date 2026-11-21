@@ -2,11 +2,12 @@ import { GoogleGenAI } from '@google/genai';
 import { env } from '../config/index.js';
 
 let aiClient: GoogleGenAI | null = null;
+export const ACTIVE_GEMINI_MODEL = 'gemini-3.1-flash-lite';
 
 if (env.GEMINI_API_KEY && env.GEMINI_API_KEY.trim() !== '') {
   try {
-    aiClient = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
-    console.log('✨ Gemini AI client initialized with Gemini 2.0 Flash.');
+    aiClient = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY.trim() });
+    console.log(`✨ Live Google Gemini AI client initialized using model: ${ACTIVE_GEMINI_MODEL}`);
   } catch (err) {
     console.warn('⚠️ Could not initialize Gemini AI client:', err);
   }
