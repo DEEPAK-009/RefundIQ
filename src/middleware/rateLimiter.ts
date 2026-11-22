@@ -34,6 +34,7 @@ export const disputeSubmissionLimiter = rateLimit({
   limit: 10,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
+  validate: false,
   keyGenerator: (req: Request): string => {
     // Key by authoritative customer ID if authenticated, or header, fallback to IP
     const custId = (req as any).customer?.id || req.headers['x-customer-id']?.toString();
