@@ -15,6 +15,7 @@ const envSchema = z.object({
   MAX_AUTO_REFUND_AMOUNT: z.coerce.number().default(500),
   SUSPICIOUS_REFUND_RATE_THRESHOLD: z.coerce.number().default(0.3),
   CLAIM_WINDOW_HOURS: z.coerce.number().default(24),
+  MAX_IMAGE_DIMENSION_THRESHOLD: z.coerce.number().default(1600),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
