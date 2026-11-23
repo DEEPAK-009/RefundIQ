@@ -356,10 +356,10 @@ function renderDisputeSubmissionTray() {
 
         <div>
           <label class="block text-2xs uppercase tracking-wider font-bold text-slate-500 mb-1">
-            Attach Photo Evidence <span class="text-amber-600 font-semibold">(Images only)</span>:
+            Attach Photo Evidence <span class="text-amber-600 font-semibold">(Images only, Max 2)</span>:
           </label>
           <!-- capture="environment" (Keep commented out during local testing; uncomment to force mobile camera) -->
-          <input type="file" id="chatEvidenceFiles" accept="image/png, image/jpeg, image/webp" multiple required class="text-xs text-slate-600 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-white hover:file:bg-slate-900 cursor-pointer w-full">
+          <input type="file" id="chatEvidenceFiles" accept="image/png, image/jpeg, image/webp" multiple required onchange="if(this.files.length > 2){ alert('Maximum of 2 images allowed for initial submission. Please re-select up to 2 photos.'); this.value = ''; }" class="text-xs text-slate-600 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-white hover:file:bg-slate-900 cursor-pointer w-full">
         </div>
       </div>
 
@@ -405,6 +405,10 @@ async function submitChatDispute(event) {
   const fileInput = document.getElementById('chatEvidenceFiles');
   if (!fileInput.files || fileInput.files.length === 0) {
     alert('Please attach photo evidence (JPG, PNG, or WebP).');
+    return;
+  }
+  if (fileInput.files.length > 2) {
+    alert('A maximum of 2 photos are accepted for the initial dispute. Please select up to 2 images.');
     return;
   }
 

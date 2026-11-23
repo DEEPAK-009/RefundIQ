@@ -1,18 +1,34 @@
 import fs from 'fs';
 import { z } from 'zod';
-import { genAI, isGeminiConfigured, ACTIVE_GEMINI_MODEL } from './geminiClient.js';
+import { executeVisionPrompt } from './multiProviderClient.js';
 
 export const ExtractedEvidenceSchema = z.object({
   visible_food_items: z.array(z.string()).default([]),
   packaging_and_containers: z.array(z.string()).default([]),
-  visible_spillage_or_damage: z.boolean(),
+  visible_spillage_or_damage: z.preprocess((val) => {
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'string') return val.toLowerCase() === 'true';
+    return false;
+  }, z.boolean()).default(false),
   damage_description: z.string().nullable().optional(),
-  visible_mismatch: z.boolean(),
+  visible_mismatch: z.preprocess((val) => {
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'string') return val.toLowerCase() === 'true';
+    return false;
+  }, z.boolean()).default(false),
   mismatch_description: z.string().nullable().optional(),
   readable_order_identifiers: z.array(z.string()).default([]),
-  image_quality: z.enum(['high', 'medium', 'low', 'unclear']),
-  analysis_confidence: z.enum(['high', 'medium', 'low']),
-  summary_observations: z.string(),
+  image_quality: z.preprocess((val) => {
+    const s = String(val).toLowerCase();
+    if (['high', 'medium', 'low', 'unclear'].includes(s)) return s;
+    return 'medium';
+  }, z.enum(['high', 'medium', 'low', 'unclear'])).default('medium'),
+  analysis_confidence: z.preprocess((val) => {
+    const s = String(val).toLowerCase();
+    if (['high', 'medium', 'low'].includes(s)) return s;
+    return 'medium';
+  }, z.enum(['high', 'medium', 'low'])).default('medium'),
+  summary_observations: z.string().default('Evidence image analyzed.'),
 });
 
 export type ExtractedEvidence = z.infer<typeof ExtractedEvidenceSchema>;
@@ -32,11 +48,8 @@ export interface EvidenceInput {
  * rather than decide whether the customer is telling the truth.
  */
 export async function analyzeEvidenceImage(input: EvidenceInput): Promise<ExtractedEvidence> {
-  if (isGeminiConfigured() && genAI && fs.existsSync(input.filePath)) {
+  if (fs.existsSync(input.filePath)) {
     try {
-      const imageBytes = fs.readFileSync(input.filePath);
-      const base64Data = imageBytes.toString('base64');
-
       const prompt = `You are a forensic computer vision assistant for a food delivery platform.
 Analyze this photo submitted with a customer dispute.
 Claimed category: "${input.claimedCategory}".
@@ -61,33 +74,16 @@ Return strictly valid JSON with this schema:
   "summary_observations": "factual summary of what is seen in the image"
 }`;
 
-      const response = await genAI.models.generateContent({
-        model: ACTIVE_GEMINI_MODEL,
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: prompt },
-              {
-                inlineData: {
-                  data: base64Data,
-                  mimeType: input.mimeType || 'image/jpeg',
-                },
-              },
-            ],
-          },
-        ],
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-        },
+      const result = await executeVisionPrompt({
+        prompt,
+        filePath: input.filePath,
+        mimeType: input.mimeType || 'image/jpeg',
       });
 
-      const responseText = response.text?.trim() || '{}';
-      const parsed = JSON.parse(responseText);
+      const parsed = JSON.parse(result.text);
       return ExtractedEvidenceSchema.parse(parsed);
-    } catch (err) {
-      console.warn('[WARN] Gemini vision analysis failed, falling back to deterministic analyzer:', err);
+    } catch (err: any) {
+      console.warn('[WARN] Multi-provider vision analysis failed, falling back to deterministic analyzer:', err.message);
     }
   }
 

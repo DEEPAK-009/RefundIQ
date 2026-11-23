@@ -1,9 +1,14 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { dbPool, query } from '../db/index.js';
 import { authenticateCustomer } from '../middleware/auth.js';
-import { uploadEvidence, computeFileHash, verifyUploadedFilesIntegrity } from '../middleware/upload.js';
+import {
+  uploadInitialEvidence,
+  uploadSupplementalEvidence,
+  computeFileHash,
+  verifyUploadedFilesIntegrity,
+} from '../middleware/upload.js';
 import { optimizeUploadedFiles } from '../utils/imageOptimizer.js';
 import { enqueueRefundAnalysis } from '../queue/refundQueue.js';
 import { disputeSubmissionLimiter } from '../middleware/rateLimiter.js';
@@ -53,12 +58,39 @@ const refundFormSchema = z.object({
 refundsRouter.post(
   '/',
   disputeSubmissionLimiter,
-  uploadEvidence.array('evidence', 5),
+  (req: Request, res: Response, next: NextFunction) => {
+    uploadInitialEvidence.array('evidence', 2)(req, res, (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
+          return res.status(400).json({
+            success: false,
+            error: 'MAX_FILES_EXCEEDED',
+            message: 'You can upload a maximum of 2 photos for the initial dispute.',
+          });
+        }
+        return res.status(400).json({
+          success: false,
+          error: 'UPLOAD_ERROR',
+          message: err.message,
+        });
+      }
+      next();
+    });
+  },
   verifyUploadedFilesIntegrity,
   optimizeUploadedFiles,
   async (req: Request, res: Response): Promise<void> => {
-  const customerId = req.customer!.id;
-  const files = (req.files as Express.Multer.File[]) || [];
+    const customerId = req.customer!.id;
+    const files = (req.files as Express.Multer.File[]) || [];
+
+    if (files.length > 2) {
+      res.status(400).json({
+        success: false,
+        error: 'MAX_FILES_EXCEEDED',
+        message: 'You can upload a maximum of 2 photos for the initial dispute.',
+      });
+      return;
+    }
 
   // 1. Input Validation with Zod
   const validationResult = refundFormSchema.safeParse(req.body);
@@ -350,7 +382,7 @@ refundsRouter.get('/:requestId/stream', async (req: Request, res: Response): Pro
  */
 refundsRouter.post(
   '/:requestId/additional-evidence',
-  uploadEvidence.array('evidence', 5),
+  uploadSupplementalEvidence.array('evidence', 5),
   verifyUploadedFilesIntegrity,
   optimizeUploadedFiles,
   async (req: Request, res: Response): Promise<void> => {

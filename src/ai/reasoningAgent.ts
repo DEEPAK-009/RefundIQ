@@ -1,15 +1,37 @@
 import { z } from 'zod';
-import { genAI, isGeminiConfigured, ACTIVE_GEMINI_MODEL } from './geminiClient.js';
+import { executeTextPrompt } from './multiProviderClient.js';
 import { AssembledReasoningContext } from './ragRetriever.js';
 
 export const AgentRecommendationSchema = z.object({
-  decision: z.enum(['APPROVE', 'DECLINE', 'ESCALATE']),
-  refund_type: z.enum(['FULL', 'PARTIAL', 'NONE']),
-  suggested_refund_amount: z.number().min(0),
-  reasoning: z.string().min(10),
-  clauses_used: z.array(z.string()).min(1),
-  evidence_status: z.enum(['CONSISTENT', 'INCONSISTENT', 'INCONCLUSIVE']),
-  confidence: z.enum(['high', 'medium', 'low']),
+  decision: z.preprocess((val) => {
+    const s = String(val).toUpperCase();
+    if (['APPROVE', 'DECLINE', 'ESCALATE'].includes(s)) return s;
+    return 'ESCALATE';
+  }, z.enum(['APPROVE', 'DECLINE', 'ESCALATE'])),
+  refund_type: z.preprocess((val) => {
+    const s = String(val).toUpperCase();
+    if (['FULL', 'PARTIAL', 'NONE'].includes(s)) return s;
+    return 'PARTIAL';
+  }, z.enum(['FULL', 'PARTIAL', 'NONE'])),
+  suggested_refund_amount: z.preprocess((val) => {
+    const num = Number(val);
+    return isNaN(num) ? 0 : Math.max(0, num);
+  }, z.number().min(0)),
+  reasoning: z.string().min(5),
+  clauses_used: z.preprocess((val) => {
+    if (Array.isArray(val) && val.length > 0) return val;
+    return ['POL-01'];
+  }, z.array(z.string()).min(1)),
+  evidence_status: z.preprocess((val) => {
+    const s = String(val).toUpperCase();
+    if (['CONSISTENT', 'INCONSISTENT', 'INCONCLUSIVE'].includes(s)) return s;
+    return 'INCONCLUSIVE';
+  }, z.enum(['CONSISTENT', 'INCONSISTENT', 'INCONCLUSIVE'])),
+  confidence: z.preprocess((val) => {
+    const s = String(val).toLowerCase();
+    if (['high', 'medium', 'low'].includes(s)) return s;
+    return 'medium';
+  }, z.enum(['high', 'medium', 'low'])),
 });
 
 export type AgentRecommendation = z.infer<typeof AgentRecommendationSchema>;
@@ -67,23 +89,12 @@ Return strictly valid JSON adhering to this exact schema:
   "confidence": "high" | "medium" | "low"
 }`;
 
-  if (isGeminiConfigured() && genAI) {
-    try {
-      const response = await genAI.models.generateContent({
-        model: ACTIVE_GEMINI_MODEL,
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-        },
-      });
-
-      const responseText = response.text?.trim() || '{}';
-      const parsed = JSON.parse(responseText);
-      return AgentRecommendationSchema.parse(parsed);
-    } catch (err) {
-      console.warn('[WARN] Gemini reasoning agent failed, falling back to deterministic adjudicator:', err);
-    }
+  try {
+    const result = await executeTextPrompt({ prompt });
+    const parsed = JSON.parse(result.text);
+    return AgentRecommendationSchema.parse(parsed);
+  } catch (err: any) {
+    console.warn('[WARN] Multi-provider reasoning agent failed, falling back to deterministic adjudicator:', err.message);
   }
 
   // Deterministic local reasoning engine (matches the exact example on Page 5 & 6 of the PDF)

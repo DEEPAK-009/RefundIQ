@@ -44,14 +44,25 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
   }
 };
 
-export const uploadEvidence = multer({
+export const uploadInitialEvidence = multer({
   storage,
   fileFilter,
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB per file
-    files: 5, // Maximum 5 files per dispute
+    files: 2, // Maximum 2 files for initial dispute intake
   },
 });
+
+export const uploadSupplementalEvidence = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+    files: 5, // Maximum 5 files for supplemental evidence
+  },
+});
+
+export const uploadEvidence = uploadInitialEvidence;
 
 export interface MagicByteValidationResult {
   isValid: boolean;

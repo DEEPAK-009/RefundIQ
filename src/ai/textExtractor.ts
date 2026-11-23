@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { genAI, isGeminiConfigured, ACTIVE_GEMINI_MODEL } from './geminiClient.js';
+import { executeTextPrompt } from './multiProviderClient.js';
 
 export const ExtractedComplaintSchema = z.object({
   issue_category: z.enum([
@@ -52,24 +52,13 @@ Extract strictly valid JSON with this exact schema:
   "missing_information": []
 }`;
 
-  if (isGeminiConfigured() && genAI) {
-    try {
-      const response = await genAI.models.generateContent({
-        model: ACTIVE_GEMINI_MODEL,
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-        },
-      });
-
-      const responseText = response.text?.trim() || '{}';
-      const parsed = JSON.parse(responseText);
-      const validated = ExtractedComplaintSchema.parse(parsed);
-      return validated;
-    } catch (err) {
-      console.warn('[WARN] Gemini text extraction failed, falling back to deterministic extractor:', err);
-    }
+  try {
+    const result = await executeTextPrompt({ prompt });
+    const parsed = JSON.parse(result.text);
+    const validated = ExtractedComplaintSchema.parse(parsed);
+    return validated;
+  } catch (err: any) {
+    console.warn('[WARN] Multi-provider text extraction failed, falling back to deterministic extractor:', err.message);
   }
 
   // Deterministic local extraction fallback

@@ -42,6 +42,14 @@ app.use('/api/review', reviewRouter);
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
+    res.status(400).json({
+      success: false,
+      error: 'MAX_FILES_EXCEEDED',
+      message: 'Too many files uploaded. A maximum of 2 photos are accepted for initial dispute submission.',
+    });
+    return;
+  }
   console.error('Unhandled API Error:', err);
   res.status(err.status || 500).json({
     success: false,

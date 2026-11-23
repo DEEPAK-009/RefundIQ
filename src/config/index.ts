@@ -16,6 +16,11 @@ const envSchema = z.object({
   SUSPICIOUS_REFUND_RATE_THRESHOLD: z.coerce.number().default(0.3),
   CLAIM_WINDOW_HOURS: z.coerce.number().default(24),
   MAX_IMAGE_DIMENSION_THRESHOLD: z.coerce.number().default(1600),
+  NVIDIA_API_KEY: z.string().optional(),
+  COHERE_API_KEY: z.string().optional(),
+  REQUESTY_API_KEY: z.string().optional(),
+  XKIRO_API_KEY: z.string().optional(),
+  LLM_EXECUTION_MODE: z.enum(['FALLBACK', 'PARALLEL_RACE', 'PRIMARY_ONLY']).default('FALLBACK'),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
